@@ -1,0 +1,5 @@
+[functions.consent-email]
+verify_jwt = true
+
+[functions.buscar-resultado]
+verify_jwt = true
