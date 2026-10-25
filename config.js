@@ -3,11 +3,11 @@ export const SUPABASE_URL = "https://nfrafunlxkcixokpexqi.supabase.co";
 export const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5mcmFmdW5seGtjaXhva3BleHFpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI5MjY4NDEsImV4cCI6MjEwODUwMjg0MX0.ek2UpsFiEX7NB_r3pWXBIg1iROVj6_T8OBoxswepQB4";
 
 // Apoio ao projeto
-export const YOUTUBE_URL = "";                       // ex.: "https://www.youtube.com/@seucanal" (vazio = botão "em breve")
+export const YOUTUBE_URL = "https://www.youtube.com/@dyoliveirayt";
 export const PIX_CHAVE = "dioneioliveirasbs@gmail.com";
 
 // Loja (Shopee). Cole o link da sua conta e adicione os produtos de corrida de rua.
-export const SHOPEE_LOJA_URL = "";   // ex.: "https://shopee.com.br/seu_usuario"
+export const SHOPEE_LOJA_URL = "https://collshp.com/dyoliveirayt?view=storefront";
 export const SHOPEE_AVISO = "Alguns links podem ser de afiliado: se você comprar por eles, posso receber uma comissão, sem custo extra para você.";
 export const PRODUTOS = [
   // { titulo: "Tênis de corrida ...", url: "https://s.shopee.com.br/xxxx", preco: "R$ 199,90", imagem: "https://...", categoria: "Tênis" },
