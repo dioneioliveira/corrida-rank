@@ -309,9 +309,13 @@ function novaProvaView() {
       const c = data.candidatos[+b.dataset.i];
       set("tempo", fmtTime(c.tempo_s)); set("inscritos", c.inscritos); set("pos_geral", c.pos_geral);
       set("categoria", c.categoria ?? ""); set("insc_cat", c.insc_cat ?? ""); set("pos_cat", c.pos_cat ?? ""); set("fonte_url", data.fonte);
-      if (!form.elements.nome_prova.value.trim() && data.titulo) set("nome_prova", data.titulo.slice(0, 120));
+      const m = data.meta || {};
+      if ((m.titulo || data.titulo) && !form.elements.nome_prova.value.trim()) set("nome_prova", (m.titulo || data.titulo).slice(0, 120));
+      if (m.data_prova) set("data_prova", m.data_prova);
+      if (m.cidade_prova) set("cidade_prova", m.cidade_prova.toLowerCase().replace(/(^|\s)\S/g, x => x.toUpperCase()).replace(/\b(De|Do|Da|Dos|Das)\b/g, x => x.toLowerCase()));
+      if (m.dist_cat) { set("dist_cat", m.dist_cat); form.elements.dist_cat.dispatchEvent(new Event("change")); if (m.dist_cat === "outra") set("km", m.distancia_km); }
       out.querySelectorAll(".cand").forEach(x => x.classList.toggle("on", x === b));
-      toast("Preenchido! Confira com o print e complete data e distância."); form.scrollIntoView({ behavior: "smooth" });
+      toast("Preenchido! Confira com o print e anexe-o para enviar."); form.scrollIntoView({ behavior: "smooth" });
     });
   };
   const sel = app.querySelector("[name=dist_cat]");

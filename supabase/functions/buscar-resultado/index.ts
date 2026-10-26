@@ -2,6 +2,7 @@
 // Entrada (POST, usuário logado): { url: "https://...", nome?: string, peito?: string }
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { analisar } from "../_shared/resultados.js";
+import { ehChiprun, filtrarAtletas, modalidadeParaDistancia, parseChiprun, termoDeBusca } from "../_shared/chiprun.js";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -49,6 +50,38 @@ async function baixar(url: string) {
   throw new Error("Redirecionamentos demais");
 }
 
+// Chiprun: usa a busca do próprio site e calcula os totais (inscritos geral e da categoria) pela paginação.
+async function buscarChiprun(u: URL, nome: string, peito: string) {
+  const base = u.origin + u.pathname, modalidade = u.searchParams.get("modalidade");
+  const ler = async (extra: Record<string, string>) => {
+    const q = new URLSearchParams(); if (modalidade) q.set("modalidade", modalidade);
+    for (const [k, v] of Object.entries(extra)) q.set(k, v);
+    return parseChiprun((await baixar(`${base}?${q}`)).texto);
+  };
+  const contar = async (extra: Record<string, string>) => {
+    const p1 = await ler({ ...extra, pagina: "1" });
+    if (p1.paginas <= 1) return p1.atletas.length;
+    const ult = await ler({ ...extra, pagina: String(p1.paginas) });
+    return (p1.paginas - 1) * p1.atletas.length + ult.atletas.length;
+  };
+  const busca = termoDeBusca(nome, peito);
+  let primeira = await ler({ busca, pagina: "1" }); const achados = [...primeira.atletas];
+  for (let pg = 2; pg <= Math.min(primeira.paginas, 4); pg++) achados.push(...(await ler({ busca, pagina: String(pg) })).atletas);
+  const sel = filtrarAtletas(achados, nome, peito).filter((a: { liquido_s: number | null }) => a.liquido_s).slice(0, 4);
+  const meta = { titulo: primeira.titulo, cidade_prova: primeira.cidade, data_prova: primeira.data_prova, ...(modalidadeParaDistancia(sel[0]?.modalidade ?? modalidade) ?? {}) };
+  const inscritos = sel.length ? await contar({}) : 0, porCat: Record<string, number> = {};
+  const candidatos = [];
+  for (const a of sel) {
+    if (a.categoria && a.pos_cat && !(a.categoria in porCat)) porCat[a.categoria] = await contar({ faixa_etaria: a.categoria });
+    const comCat = a.categoria && a.pos_cat;
+    candidatos.push({ nome: a.nome, peito: a.numero, tempo_s: a.liquido_s, pos_geral: a.pos_geral, pos_geral_calculada: false, inscritos,
+      categoria: a.categoria, insc_cat: comCat ? porCat[a.categoria] : null, pos_cat: comCat ? a.pos_cat : null, pos_cat_calculada: comCat ? false : null,
+      sexo: a.categoria ? (a.categoria[0] === "F" ? "F" : a.categoria[0] === "M" ? "M" : null) : null, parcial: false, linhas_na_tabela: inscritos });
+  }
+  return { fonte: u.toString(), titulo: meta.titulo, meta, candidatos,
+    aviso: candidatos.length ? null : "Não encontrei esse nome na Chiprun para essa modalidade. Confira o nome ou use o número de peito." };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   try {
@@ -58,6 +91,9 @@ Deno.serve(async (req) => {
     const { url, nome, peito } = await req.json();
     if (typeof url !== "string" || url.length > 600) return json({ erro: "Cole o link da página de resultados." }, 400);
     if (!(nome && String(nome).trim().length >= 3) && !String(peito ?? "").trim()) return json({ erro: "Informe seu nome (ou o número de peito)." }, 400);
+
+    let alvo: URL; try { alvo = new URL(url); } catch { return json({ erro: "Link inválido." }, 400); }
+    if (ehChiprun(alvo.hostname) && alvo.pathname.startsWith("/evento/")) return json(await buscarChiprun(alvo, String(nome ?? ""), String(peito ?? "")));
 
     const { texto, tipo, urlFinal } = await baixar(url);
     const r = analisar(texto, tipo, { nome: String(nome ?? ""), peito: String(peito ?? "") });
