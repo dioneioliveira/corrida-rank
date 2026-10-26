@@ -2,6 +2,9 @@
 export const SUPABASE_URL = "https://nfrafunlxkcixokpexqi.supabase.co";
 export const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5mcmFmdW5seGtjaXhva3BleHFpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI5MjY4NDEsImV4cCI6MjEwODUwMjg0MX0.ek2UpsFiEX7NB_r3pWXBIg1iROVj6_T8OBoxswepQB4";
 
+// Endereço do app (usado nos convites para compartilhar)
+export const APP_URL = "https://dioneioliveira.github.io/corrida-rank/";
+
 // Apoio ao projeto
 export const YOUTUBE_URL = "https://www.youtube.com/@dyoliveirayt";
 export const PIX_CHAVE = "dioneioliveirasbs@gmail.com";

@@ -1,7 +1,9 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm";
 import { compartilharProva, compartilharRanking, compartilharSelos } from "./cartao.js";
+import { bandeiraDaCidade } from "./bandeiras.js";
+import { reenquadrar } from "./foto.js";
 import { fmtNum, fmtKm, calcular, peso, PESOS, PODIO_GERAL, PODIO_CATEGORIA, PARTICIPACAO, nivelDe, proximoNivel } from "./regras.js";
-import { SUPABASE_URL, SUPABASE_ANON_KEY, YOUTUBE_URL, PIX_CHAVE, SHOPEE_LOJA_URL, SHOPEE_AVISO, PRODUTOS, VERSAO_TERMO, TEXTO_TERMO } from "./config.js";
+import { SUPABASE_URL, SUPABASE_ANON_KEY, YOUTUBE_URL, PIX_CHAVE, SHOPEE_LOJA_URL, SHOPEE_AVISO, PRODUTOS, APP_URL, VERSAO_TERMO, TEXTO_TERMO } from "./config.js";
 
 // Sem a trava entre abas (navigator.locks): no iPhone, uma aba em segundo plano podia deixar o login esperando para sempre.
 const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { lock: (_nome, _tempo, fn) => fn() } });
@@ -132,11 +134,11 @@ async function rankingView() {
 
 function comoHTML() {
   return `<div class="como">
-  <p><b>Só valem provas</b>, com print conferido. Cada prova aprovada rende pontos assim:</p>
+  <p><b>Só valem provas</b>: com print conferido ou confirmadas direto no site de resultados. Cada prova aprovada rende pontos assim:</p>
   <ol>
     <li><b>Participação:</b> ${PARTICIPACAO} pontos por concluir a prova.</li>
     <li><b>Posição:</b> 100 × (inscritos − sua posição + 1) ÷ inscritos. O 1º ganha 100; quem chega no meio ganha ~50; o último ganha pouco mais de 0.</li>
-    <li><b>Pódio:</b> bônus de ${PODIO_GERAL.join(" / ")} pontos para 1º / 2º / 3º no <i>geral</i> e ${PODIO_CATEGORIA.join(" / ")} na <i>categoria</i>.</li>
+    <li><b>Pódio (do 1º ao 5º lugar):</b> bônus de ${PODIO_GERAL.join(" / ")} pontos no <i>geral</i> e ${PODIO_CATEGORIA.join(" / ")} na <i>categoria</i>.</li>
     <li><b>Peso da distância:</b> a soma acima é multiplicada pelo peso da prova.</li>
   </ol>
   <table>${PESOS.map(p => `<tr><td>${p[2]}</td><td>×${String(p[1]).replace(".", ",")}</td></tr>`).join("")}</table>
@@ -159,9 +161,9 @@ function bindSimulador() {
 
 // ---------- Perfil público de um corredor ----------
 function badges(l) {
-  const has = c => l.some(p => p.dist_cat === c), top = l.filter(p => p.pos_geral <= 3 || (p.pos_cat && p.pos_cat <= 3));
+  const has = c => l.some(p => p.dist_cat === c), top = l.filter(p => p.pos_geral <= 5 || (p.pos_cat && p.pos_cat <= 5));
   return [[l.length >= 1, "🏁", "Primeira prova"], [l.length >= 5, "🔥", "5 provas"], [l.length >= 10, "💪", "10 provas"],
-    [top.length >= 1, "🥇", "Pódio"], [l.some(p => p.pos_geral / p.inscritos <= .1), "⚡", "Top 10%"],
+    [top.length >= 1, "🥇", "Pódio (top 5)"], [l.some(p => p.pos_geral / p.inscritos <= .1), "⚡", "Top 10%"],
     [has("21k"), "🏃", "Meia maratona"], [has("42k"), "🌍", "Maratonista"], [new Set(l.map(p => p.cidade_prova).filter(Boolean)).size >= 3, "🧭", "3 cidades"]]
     .filter(b => b[0]);
 }
@@ -174,18 +176,27 @@ function selosDados(l) {
 }
 function selosHTML(l, proprio = false) {
   const { dist, cid } = selosDados(l);
-  const selo = (anel, nome, n, cls = "") => { const nv = nivelDe(n), prox = proximoNivel(n);
-    return `<div class="selo ${nv ? nv[1] : "off"}"><div class="ring ${cls}">${anel}</div><b>${esc(nome)}</b><span>${nv ? nv[2] : "bloqueado"} · ${prox ? n + "/" + prox : n + " ✓"}</span></div>`; };
+  const selo = (anel, nome, n, cls = "", extra = "") => { const nv = nivelDe(n), prox = proximoNivel(n);
+    return `<div class="selo ${nv ? nv[1] : "off"}"><div class="ring ${cls}" ${extra}>${anel}</div><b>${esc(nome)}</b><span>${nv ? nv[2] : "bloqueado"} · ${prox ? n + "/" + prox : n + " ✓"}</span></div>`; };
   return `<h2>Selos por distância</h2><div class="selos">${dist.map(d => selo(d.lab, d.nome, d.n)).join("")}</div>
-  <h2>Selos por cidade</h2>${cid.length ? `<div class="selos">${cid.map(c => selo("📍", c.nome, c.n, "pin")).join("")}</div>`
+  <h2>Selos por cidade</h2>${cid.length ? `<div class="selos">${cid.map(c => selo("📍", c.nome, c.n, "pin", `data-cidade="${esc(c.nome)}"`)).join("")}</div>`
     : `<div class="card empty">Corra provas em cidades diferentes para ganhar selos de cada uma.</div>`}
   <p class="sub center">Bronze: 1 prova · Prata: 3 · Ouro: 5 (aprovadas, na mesma distância ou cidade).</p>
   ${proprio ? `<button class="btn ghost" id="shrSelos" style="margin-bottom:6px">📤 Compartilhar meus selos</button>` : ""}`;
 }
+// Troca o 📍 pela bandeira do município (quando o Wikidata tiver)
+function carregarBandeiras() {
+  app.querySelectorAll(".ring[data-cidade]").forEach(async el => {
+    const url = await bandeiraDaCidade(el.dataset.cidade);
+    if (url && el.isConnected) { el.innerHTML = `<img src="${esc(url)}" alt="Bandeira de ${esc(el.dataset.cidade)}" loading="lazy">`; el.classList.add("flag"); }
+  });
+}
 function bindSelos(l, p) {
+  carregarBandeiras();
   const b = $("#shrSelos"); if (!b) return;
   b.onclick = async () => {
     b.disabled = true; const d = selosDados(l);
+    d.cid = await Promise.all(d.cid.map(async (c, i) => ({ ...c, bandeira: i < 3 ? (await bandeiraDaCidade(c.nome)) || null : null })));
     const r = await compartilharSelos({ nome: p.nome, cidade: p.cidade, avatar_url: p.avatar_url, ...d }).catch(() => "erro");
     b.disabled = false; const msg = { baixado: "Cartão salvo! Agora é só postar 📲", erro: "Não foi possível gerar o cartão" }[r]; if (msg) toast(msg);
   };
@@ -201,7 +212,7 @@ async function runnerView(uid, back = true) {
   const pts = (l || []).filter(x => x.ano === f.ano).reduce((t, x) => t + Number(x.pts_geral), 0);
   app.innerHTML = `<button class="link" id="bk" style="text-align:left">← Voltar</button>
   <div class="card center">${avatar(p, "big")}<div class="name" style="font-size:20px">${esc(p.nome)}</div><div class="sub">📍 ${esc(p.cidade)} · ${p.sexo === "M" ? "Masculino" : "Feminino"}</div>
-  <div class="stats"><div><b>${(l || []).length}</b><span>provas</span></div><div><b>${fmtNum(pts, 0)}</b><span>pts ${f.ano}</span></div><div><b>${(l || []).filter(x => x.pos_geral <= 3 || (x.pos_cat && x.pos_cat <= 3)).length}</b><span>pódios</span></div></div></div>
+  <div class="stats"><div><b>${(l || []).length}</b><span>provas</span></div><div><b>${fmtNum(pts, 0)}</b><span>pts ${f.ano}</span></div><div><b>${(l || []).filter(x => x.pos_geral <= 5 || (x.pos_cat && x.pos_cat <= 5)).length}</b><span>pódios</span></div></div></div>
   ${badges(l || []).length ? `<h2>Conquistas</h2><div class="badges">${badges(l).map(b => `<div class="badge"><div>${b[1]}</div><span>${b[2]}</span></div>`).join("")}</div>` : ""}
   ${selosHTML(l || [], uid === me.id)}
   ${best.length ? `<h2>Melhores tempos</h2><div class="card">${best.map(b => `<div class="row"><div class="grow name">${b[0]}</div><div class="val">${fmtTime(b[1])}</div></div>`).join("")}</div>` : ""}
@@ -210,6 +221,12 @@ async function runnerView(uid, back = true) {
   bindPrints(); bindSelos(l || [], p);
 }
 
+// "ver print" para provas com print; "ver fonte" para as confirmadas direto no site
+function origemProva(r) {
+  const selo = r.verificada ? `<span class="tag aprovada" style="margin-right:6px">✅ Verificada no site</span>` : "";
+  if (r.print_path) return selo + `<button class="link inline" data-print="${esc(r.print_path)}">ver print</button>`;
+  return selo + (r.fonte_url ? `<a class="link inline" href="${esc(r.fonte_url)}" target="_blank" rel="noopener">🔎 ver fonte</a>` : "");
+}
 function provaCard(r, head = "", foot = null) {
   cache.set(r.id, r);
   const share = r.user_id === me.id && r.status !== "pendente" && r.status !== "rejeitada" ? ` · <button class="link inline" data-share="${r.id}">📤 compartilhar</button>` : "";
@@ -218,7 +235,7 @@ function provaCard(r, head = "", foot = null) {
   <div class="sub">${head}${fmtDate(r.data_prova)}${r.cidade_prova ? " · " + esc(r.cidade_prova) : ""}</div></div><div class="bib">${r.dist_cat === "outra" ? fmtKm(r.distancia_km) + "K" : r.dist_cat.toUpperCase()}</div></div>
   <div class="stats"><div class="hl"><b>${fmtTime(r.tempo_s)}</b><span>tempo</span></div><div><b>${fmtTime(r.tempo_s / r.distancia_km)}</b><span>min/km</span></div><div><b>${r.pos_geral}º</b><span>de ${r.inscritos}</span></div>
   ${r.pos_cat ? `<div><b>${r.pos_cat}º</b><span>${esc(r.categoria || "categ.")} · ${r.insc_cat}</span></div>` : ""}</div>
-  ${foot ?? `<div class="sub">${pts}<button class="link inline" data-print="${esc(r.print_path)}">ver print</button>${share}</div>`}</div>`;
+  ${foot ?? `<div class="sub">${pts}${origemProva(r)}${share}</div>`}</div>`;
 }
 function bindPrints() {
   app.querySelectorAll("[data-share]").forEach(b => b.onclick = async () => {
@@ -251,13 +268,13 @@ async function minhasView() {
   const pts = Object.fromEntries((pv || []).map(x => [x.id, x]));
   $("#box").innerHTML = `<button class="btn" id="novo">➕ Enviar resultado de prova</button><div style="height:12px"></div>` +
     ((data || []).map(r => provaCard({ ...r, ...pts[r.id] }, "", `<div style="margin:2px 0 8px"><span class="tag ${r.status}">${STATUS[r.status]}</span></div>${r.motivo ? `<div class="err">Motivo: ${esc(r.motivo)}</div>` : ""}
-      <button class="link inline" data-print="${esc(r.print_path)}">ver print</button> · <button class="link inline" data-del="${r.id}" data-path="${esc(r.print_path)}">excluir</button>${r.status === "aprovada" ? ` · <button class="link inline" data-share="${r.id}">📤 compartilhar</button>` : ""}`)).join("")
-    || `<div class="card empty">Você ainda não enviou nenhuma prova.<br>Só valem resultados de provas, com print.</div>`);
+      ${origemProva(r)} · <button class="link inline" data-del="${r.id}" data-path="${esc(r.print_path)}">excluir</button>${r.status === "aprovada" ? ` · <button class="link inline" data-share="${r.id}">📤 compartilhar</button>` : ""}`)).join("")
+    || `<div class="card empty">Você ainda não enviou nenhuma prova.<br>Só valem resultados de provas, confirmados no site ou com print.</div>`);
   $("#novo").onclick = novaProvaView;
   bindPrints();
   app.querySelectorAll("[data-del]").forEach(b => b.onclick = async () => {
     if (!confirm("Excluir esta prova?")) return;
-    await db.storage.from("prints").remove([b.dataset.path]);
+    if (b.dataset.path) await db.storage.from("prints").remove([b.dataset.path]);
     await db.from("provas").delete().eq("id", b.dataset.del); minhasView();
   });
 }
@@ -265,7 +282,7 @@ async function minhasView() {
 function novaProvaView() {
   app.innerHTML = `<button class="link" id="bk" style="text-align:left">← Voltar</button><h1>Enviar resultado</h1>
   <div class="card" id="busca"><div class="name">🔎 Buscar resultado em site</div>
-    <p class="sub">Cole o link da página de resultados da prova e eu preencho tempo, posição, inscritos e categoria. O print continua obrigatório.</p>
+    <p class="sub">Cole o link da página de resultados da prova. Se o site confirmar o seu resultado, a prova entra direto, sem print. Se não, eu preencho o formulário e você anexa o print.</p>
     <input id="bUrl" type="url" placeholder="Link dos resultados (https://...)" autocomplete="off">
     <div class="grid2"><input id="bNome" value="${esc(me.nome)}" placeholder="Seu nome como no site"><input id="bPeito" placeholder="Nº de peito" inputmode="numeric"></div>
     <button type="button" class="btn ghost" id="bGo">Buscar no site</button>
@@ -299,14 +316,13 @@ function novaProvaView() {
     let msg = data?.erro; if (!msg && error) { try { msg = (await error.context.json()).erro; } catch { msg = "Não foi possível consultar o site agora."; } }
     if (msg) return out.innerHTML = `<div class="err">${esc(msg)}</div>`;
     if (!data.candidatos.length) return out.innerHTML = `<div class="err">${esc(data.aviso || "Não encontrei seu nome nessa página.")}</div>`;
-    out.innerHTML = `<p class="sub">Toque no seu resultado para preencher o formulário:</p>` + data.candidatos.map((c, i) => `<button type="button" class="cand" data-i="${i}">
+    out.innerHTML = `<p class="sub">Toque no seu resultado:</p>` + data.candidatos.map((c, i) => `<button type="button" class="cand" data-i="${i}">
       <div class="name">${esc(c.nome)}${c.peito ? " · nº " + esc(c.peito) : ""}</div>
       <div class="sub">${fmtTime(c.tempo_s)} · ${c.pos_geral}º de ${c.inscritos}${c.categoria ? ` · ${esc(c.categoria)}: ${c.pos_cat}º de ${c.insc_cat}` : ""}</div>
       ${c.parcial ? `<div class="warn">⚠️ A página parece paginada; o total de inscritos pode ser maior.</div>` : ""}
       ${c.pos_geral_calculada ? `<div class="warn">Posição geral calculada pela ordem da tabela.</div>` : ""}${c.pos_cat_calculada ? `<div class="warn">Posição na categoria calculada pela ordem da tabela.</div>` : ""}
       ${c.sexo && c.sexo !== me.sexo ? `<div class="warn">⚠️ O resultado indica sexo ${c.sexo === "M" ? "masculino" : "feminino"}, diferente do seu perfil.</div>` : ""}</button>`).join("");
-    out.querySelectorAll(".cand").forEach(b => b.onclick = () => {
-      const c = data.candidatos[+b.dataset.i];
+    const preencher = c => {
       set("tempo", fmtTime(c.tempo_s)); set("inscritos", c.inscritos); set("pos_geral", c.pos_geral);
       set("categoria", c.categoria ?? ""); set("insc_cat", c.insc_cat ?? ""); set("pos_cat", c.pos_cat ?? ""); set("fonte_url", data.fonte);
       const m = data.meta || {};
@@ -314,8 +330,31 @@ function novaProvaView() {
       if (m.data_prova) set("data_prova", m.data_prova);
       if (m.cidade_prova) set("cidade_prova", m.cidade_prova.toLowerCase().replace(/(^|\s)\S/g, x => x.toUpperCase()).replace(/\b(De|Do|Da|Dos|Das)\b/g, x => x.toLowerCase()));
       if (m.dist_cat) { set("dist_cat", m.dist_cat); form.elements.dist_cat.dispatchEvent(new Event("change")); if (m.dist_cat === "outra") set("km", m.distancia_km); }
-      out.querySelectorAll(".cand").forEach(x => x.classList.toggle("on", x === b));
       toast("Preenchido! Confira com o print e anexe-o para enviar."); form.scrollIntoView({ behavior: "smooth" });
+    };
+    // Resultado completo vindo do site: pode ser salvo direto, já aprovado e sem print
+    const confirmar = (c, m) => {
+      out.querySelector("#okbox")?.remove();
+      out.insertAdjacentHTML("beforeend", `<div class="okbox" id="okbox"><b>✅ Resultado confirmado no site da prova</b>
+        <div class="sub">${esc(m.titulo || data.titulo)} · ${fmtDate(m.data_prova)}${m.cidade_prova ? " · " + esc(m.cidade_prova) : ""} · ${esc((m.dist_cat || "").toUpperCase())}</div>
+        <div class="sub">${fmtTime(c.tempo_s)} · ${c.pos_geral}º de ${c.inscritos}${c.categoria ? ` · ${esc(c.categoria)}: ${c.pos_cat}º de ${c.insc_cat}` : ""}</div>
+        <p class="sub">Não precisa de print. A prova entra aprovada na hora e fica marcada como verificada.</p>
+        <button type="button" class="btn" id="bSalvar">Salvar prova</button>
+        <button type="button" class="link" id="bManual">Prefiro preencher e enviar com print</button><div class="err" id="bErr"></div></div>`);
+      $("#bManual").onclick = () => preencher(c);
+      $("#bSalvar").onclick = async () => {
+        const bt = $("#bSalvar"); bt.disabled = true; bt.textContent = "Salvando…"; $("#bErr").textContent = "";
+        const r = await db.functions.invoke("buscar-resultado", { body: { url, nome: me.nome, peito: c.peito, salvar: true } });
+        let erro = r.data?.erro; if (!erro && r.error) { try { erro = (await r.error.context.json()).erro; } catch { erro = "Não foi possível salvar agora."; } }
+        if (erro) { bt.disabled = false; bt.textContent = "Salvar prova"; return $("#bErr").textContent = erro; }
+        toast("Prova salva e aprovada ✅"); f.quem = "minhas"; provasView();
+      };
+      out.querySelector("#okbox").scrollIntoView({ behavior: "smooth", block: "center" });
+    };
+    out.querySelectorAll(".cand").forEach(b => b.onclick = () => {
+      const i = +b.dataset.i, c = data.candidatos[i];
+      out.querySelectorAll(".cand").forEach(x => x.classList.toggle("on", x === b));
+      if (data.confiavel?.[i] && c.peito && !(c.sexo && c.sexo !== me.sexo)) confirmar(c, data.meta || {}); else { out.querySelector("#okbox")?.remove(); preencher(c); }
     });
   };
   const sel = app.querySelector("[name=dist_cat]");
@@ -360,15 +399,31 @@ function lojaView() {
   app.querySelectorAll(".chip").forEach(b => b.onclick = () => { f.cat = b.dataset.v; lojaView(); });
 }
 
+// ---------- Convidar outros corredores ----------
+const LINK_APP = APP_URL || (location.origin + location.pathname);
+const TEXTO_CONVITE = "Corrida Rank: o campeonato dos corredores de rua. Só valem provas! Entre no ranking:";
+async function compartilharApp() {
+  if (navigator.share) { try { await navigator.share({ title: "Corrida Rank", text: TEXTO_CONVITE, url: LINK_APP }); return; } catch (e) { if (e.name === "AbortError") return; } }
+  await copiarLink();
+}
+async function copiarLink() { try { await navigator.clipboard.writeText(LINK_APP); toast("Link copiado ✅"); } catch { toast(LINK_APP); } }
+const cartaoConvite = () => `<div class="card center"><div style="font-size:34px">📣</div><div class="name">Convide outros corredores</div>
+  <p class="sub">Quanto mais gente, mais divertido o ranking.</p><button class="btn" id="shApp">Compartilhar o app</button>
+  <div class="grid2" style="margin-top:8px"><a class="btn ghost" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(TEXTO_CONVITE + " " + LINK_APP)}">WhatsApp</a><button class="btn ghost" id="cpLink">Copiar link</button></div>
+  <div class="pix" style="font-size:13px">${esc(LINK_APP)}</div></div>`;
+const ligarConvite = () => { $("#shApp").onclick = compartilharApp; $("#cpLink").onclick = copiarLink; };
+
 // ---------- Apoie ----------
 function apoieView() {
   app.innerHTML = `<h1>💛 Apoie o projeto</h1>
+  ${cartaoConvite()}
   <p class="sub">O Corrida Rank é feito de corredor para corredor. Se quiser incentivar, fique à vontade — é totalmente opcional.</p>
   <div class="card center"><div style="font-size:34px">▶️</div><div class="name">Canal no YouTube</div><p class="sub">Treinos, provas e bastidores.</p>
     ${YOUTUBE_URL ? `<a class="btn" style="display:block;text-decoration:none" href="${esc(YOUTUBE_URL)}" target="_blank" rel="noopener">Abrir canal</a>` : `<button class="btn ghost" disabled>Em breve</button>`}</div>
   <div class="card center"><div style="font-size:34px">💸</div><div class="name">Doe via PIX</div><p class="sub">Qualquer valor ajuda. Chave PIX (e-mail):</p>
     <div class="pix">${esc(PIX_CHAVE)}</div><button class="btn" id="cp">Copiar chave PIX</button>
     <p class="sub">Abra o app do seu banco → PIX → Pagar com chave → cole a chave. Doações são voluntárias e não dão vantagem no ranking.</p></div>`;
+  ligarConvite();
   $("#cp").onclick = async () => { try { await navigator.clipboard.writeText(PIX_CHAVE); toast("Chave PIX copiada ✅"); } catch { toast(PIX_CHAVE); } };
 }
 
@@ -376,7 +431,7 @@ function apoieView() {
 async function perfilView() {
   const { data: l } = await db.from("v_provas").select("*").eq("user_id", me.id);
   app.innerHTML = `<h1>👤 Meu perfil</h1>
-  <div class="card center">${avatar(me, "big")}<label class="link" style="display:block">Trocar foto<input id="photo" type="file" accept="image/*" hidden></label>
+  <div class="card center">${avatar(me, "big")}<div class="grid2"><label class="link" style="display:block">📷 Trocar foto<input id="photo" type="file" accept="image/*" hidden></label>${me.avatar_url ? `<button type="button" class="link" id="reenq">✂️ Reenquadrar</button>` : "<span></span>"}</div>
     <div class="name">${esc(me.nome)}</div><div class="sub">📍 ${esc(me.cidade)}</div>
     ${badges(l || []).length ? `<div class="badges" style="margin-top:10px">${badges(l).map(b => `<div class="badge"><div>${b[1]}</div><span>${b[2]}</span></div>`).join("")}</div>` : ""}</div>
   ${selosHTML(l || [], true)}
@@ -384,17 +439,36 @@ async function perfilView() {
     <select name="sexo"><option value="M" ${me.sexo === "M" ? "selected" : ""}>Masculino</option><option value="F" ${me.sexo === "F" ? "selected" : ""}>Feminino</option></select>
     <button class="btn">Salvar</button></form>
   ${isAdmin ? `<button class="btn" id="adm" style="margin-bottom:10px">🛡️ Aprovar provas</button>` : ""}
+  <button class="btn ghost" id="convidar" style="margin-bottom:10px">📣 Convidar corredores</button>
   <button class="btn ghost" id="out" style="margin-bottom:10px">Sair</button>
   <button class="link" id="del" style="color:#ff6b6b">Excluir minha conta e meus dados</button>`;
   bindSelos(l || [], me);
-  $("#photo").onchange = async e => {
-    const file = e.target.files[0]; if (!file) return;
-    const path = `${me.id}/avatar.jpg`;
-    const up = await db.storage.from("avatars").upload(path, await toJpeg(file, 256, true), { upsert: true, contentType: "image/jpeg" });
-    if (up.error) return toast(up.error.message);
-    const url = db.storage.from("avatars").getPublicUrl(path).data.publicUrl + "?v=" + Date.now();
-    await db.from("profiles").update({ avatar_url: url }).eq("id", me.id); me.avatar_url = url; perfilView();
+  // Foto: escolhe a imagem, enquadra o rosto e salva (guarda também o original para reenquadrar depois)
+  const gravarFoto = async (recorte, original) => {
+    const bucket = db.storage.from("avatars"), opc = { upsert: true, contentType: "image/jpeg" };
+    if (original) { const o = await bucket.upload(`${me.id}/original.jpg`, original, opc); if (o.error) throw o.error; }
+    const up = await bucket.upload(`${me.id}/avatar.jpg`, recorte, opc); if (up.error) throw up.error;
+    const url = bucket.getPublicUrl(`${me.id}/avatar.jpg`).data.publicUrl + "?v=" + Date.now();
+    const { error } = await db.from("profiles").update({ avatar_url: url }).eq("id", me.id); if (error) throw error;
+    me.avatar_url = url; perfilView();
   };
+  $("#photo").onchange = async e => {
+    const file = e.target.files[0]; e.target.value = ""; if (!file) return;
+    try {
+      const original = await toJpeg(file, 1024), recorte = await reenquadrar(original);
+      if (recorte) await gravarFoto(recorte, original);
+    } catch (err) { toast(err.message || "Não foi possível salvar a foto"); }
+  };
+  if ($("#reenq")) $("#reenq").onclick = async () => {
+    const bucket = db.storage.from("avatars"), v = "?v=" + Date.now();
+    try {
+      let recorte;
+      try { recorte = await reenquadrar(bucket.getPublicUrl(`${me.id}/original.jpg`).data.publicUrl + v); }   // foto original guardada
+      catch { recorte = await reenquadrar(me.avatar_url.split("?")[0] + v); }                                  // fotos antigas: usa a que já está salva
+      if (recorte) await gravarFoto(recorte, null);
+    } catch (err) { toast(err.message || "Não foi possível abrir a foto"); }
+  };
+  $("#convidar").onclick = compartilharApp;
   $("#pf").onsubmit = async e => {
     e.preventDefault(); const v = Object.fromEntries(new FormData(e.target));
     const { error } = await db.from("profiles").update({ nome: v.nome.trim(), cidade: v.cidade.trim(), sexo: v.sexo }).eq("id", me.id);

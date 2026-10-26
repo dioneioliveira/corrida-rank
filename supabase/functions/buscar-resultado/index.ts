@@ -1,7 +1,7 @@
 // Lê uma página de resultados (HTML/JSON/CSV) e devolve os dados do corredor: tempo, posição geral, inscritos, categoria...
 // Entrada (POST, usuário logado): { url: "https://...", nome?: string, peito?: string }
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
-import { analisar } from "../_shared/resultados.js";
+import { analisar, norm } from "../_shared/resultados.js";
 import { ehChiprun, filtrarAtletas, modalidadeParaDistancia, parseChiprun, termoDeBusca } from "../_shared/chiprun.js";
 
 const cors = {
@@ -82,18 +82,47 @@ async function buscarChiprun(u: URL, nome: string, peito: string) {
     aviso: candidatos.length ? null : "Não encontrei esse nome na Chiprun para essa modalidade. Confira o nome ou use o número de peito." };
 }
 
+const titulo = (t: string) => t.toLowerCase().replace(/(^|\s)\S/g, (x) => x.toUpperCase()).replace(/\b(De|Do|Da|Dos|Das|E)\b/g, (x) => x.toLowerCase());
+
+// Grava a prova já aprovada e SEM print, só quando o resultado foi lido do site e confere com o perfil do corredor.
+async function salvarVerificada(userId: string, alvo: URL, r: Awaited<ReturnType<typeof buscarChiprun>>) {
+  const c = r.candidatos[0], m = r.meta;
+  if (r.candidatos.length !== 1) throw new Error("Informe o número de peito para confirmar qual é o seu resultado.");
+  const { data: p } = await admin.from("profiles").select("nome,sexo").eq("id", userId).single();
+  if (!p) throw new Error("Perfil não encontrado.");
+  const nomeAtleta = norm(c.nome);
+  if (!norm(p.nome).split(" ").filter(Boolean).every((t) => nomeAtleta.includes(t))) throw new Error(`O nome no resultado (${c.nome}) não confere com o seu perfil (${p.nome}). Envie com print para análise.`);
+  if (c.sexo && c.sexo !== p.sexo) throw new Error("O sexo da categoria no resultado não confere com o seu perfil. Envie com print para análise.");
+  const okCat = (c.pos_cat == null) === (c.insc_cat == null);
+  if (!m.data_prova || !m.dist_cat || !c.tempo_s || !c.pos_geral || !c.inscritos || c.pos_geral > c.inscritos || !okCat || (c.pos_cat && c.pos_cat > c.insc_cat!)) throw new Error("O site não trouxe todos os dados com segurança. Envie com print para análise.");
+  const fonte = alvo.origin + alvo.pathname + (alvo.searchParams.get("modalidade") ? "?modalidade=" + encodeURIComponent(alvo.searchParams.get("modalidade")!).replace(/%20/g, "+") : "");
+  const { data, error } = await admin.from("provas").insert({
+    user_id: userId, nome_prova: titulo(m.titulo).slice(0, 120), data_prova: m.data_prova, cidade_prova: m.cidade_prova ? titulo(m.cidade_prova) : null,
+    dist_cat: m.dist_cat, distancia_km: m.distancia_km, tempo_s: c.tempo_s, inscritos: c.inscritos, pos_geral: c.pos_geral,
+    categoria: c.categoria, insc_cat: c.insc_cat, pos_cat: c.pos_cat, print_path: null, status: "aprovada", verificada: true, fonte_url: fonte,
+  }).select("id,nome_prova").single();
+  if (error) throw new Error(error.code === "23505" ? "Você já tem essa prova cadastrada." : error.message);
+  return { ok: true, prova: data };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   try {
     const jwt = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
     const { data: u } = await admin.auth.getUser(jwt);
     if (!u.user) return json({ erro: "não autenticado" }, 401);
-    const { url, nome, peito } = await req.json();
+    const { url, nome, peito, salvar } = await req.json();
     if (typeof url !== "string" || url.length > 600) return json({ erro: "Cole o link da página de resultados." }, 400);
     if (!(nome && String(nome).trim().length >= 3) && !String(peito ?? "").trim()) return json({ erro: "Informe seu nome (ou o número de peito)." }, 400);
 
     let alvo: URL; try { alvo = new URL(url); } catch { return json({ erro: "Link inválido." }, 400); }
-    if (ehChiprun(alvo.hostname) && alvo.pathname.startsWith("/evento/")) return json(await buscarChiprun(alvo, String(nome ?? ""), String(peito ?? "")));
+    if (ehChiprun(alvo.hostname) && alvo.pathname.startsWith("/evento/")) {
+      const r = await buscarChiprun(alvo, String(nome ?? ""), String(peito ?? ""));
+      // "confiavel": o resultado veio do site com data, distância, posições e totais completos
+      const confiavel = r.candidatos.map((c) => !!(r.meta.data_prova && r.meta.dist_cat && c.tempo_s && c.pos_geral && c.inscritos && ((c.pos_cat == null) === (c.insc_cat == null))));
+      if (salvar === true) return json(await salvarVerificada(u.user.id, alvo, r));
+      return json({ ...r, confiavel });
+    }
 
     const { texto, tipo, urlFinal } = await baixar(url);
     const r = analisar(texto, tipo, { nome: String(nome ?? ""), peito: String(peito ?? "") });

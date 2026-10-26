@@ -153,7 +153,7 @@ export async function compartilharRanking(o) {
 
 // Cartão dos selos. o: { nome, cidade, avatar_url, dist: [{lab, nome, n}], cid: [{nome, n}] }
 const COR = { bronze: ["#d08a4a", "#4a3118", "#f1c9a0"], prata: ["#dfe5ee", "#4b5562", "#ffffff"], ouro: ["#ffd24a", "#5a4510", "#ffe9a3"] };
-function selo(ctx, cx, cy, anel, nome, n) {
+function selo(ctx, cx, cy, anel, nome, n, img = null) {
   const nv = nivelDe(n), prox = proximoNivel(n), R = 92;
   if (nv) {
     const [borda, fundoCor, txt] = COR[nv[1]];
@@ -164,7 +164,11 @@ function selo(ctx, cx, cy, anel, nome, n) {
     ctx.fillStyle = "#12161b"; ctx.beginPath(); ctx.arc(cx, cy, R, 0, 7); ctx.fill();
     ctx.setLineDash([16, 14]); ctx.strokeStyle = "#3a424f"; ctx.lineWidth = 8; ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = "#4b5460";
   }
-  ctx.textAlign = "center"; ctx.font = `italic 800 ${anel.length > 2 ? 84 : 78}px ${DISP}`; ctx.fillText(anel, cx, cy + 28);
+  if (img && nv) {   // bandeira da cidade dentro da medalha
+    ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, R - 8, 0, 7); ctx.clip();
+    const k = Math.max(((R - 8) * 2) / img.width, ((R - 8) * 2) / img.height);
+    ctx.drawImage(img, cx - img.width * k / 2, cy - img.height * k / 2, img.width * k, img.height * k); ctx.restore();
+  } else { ctx.textAlign = "center"; ctx.font = `italic 800 ${anel.length > 2 ? 84 : 78}px ${DISP}`; ctx.fillText(anel, cx, cy + 28); }
   ctx.fillStyle = nv ? "#f3f5f7" : "#6d7685"; ctx.font = `700 36px ${BODY}`;
   let t = nome; while (ctx.measureText(t).width > 290 && t.length > 3) t = t.slice(0, -2); if (t !== nome) t += "…";
   ctx.fillText(t, cx, cy + R + 52);
@@ -175,6 +179,7 @@ export async function cartaoSelos(o) {
   await fontes();
   const cv = document.createElement("canvas"); cv.width = W; cv.height = H; const ctx = cv.getContext("2d");
   fundo(ctx); logo(ctx);
+  const bandeiras = await Promise.all(o.cid.slice(0, 3).map(c => loadImg(c.bandeira)));
   const total = o.dist.filter(d => d.n > 0).length + o.cid.length;
   ctx.textAlign = "left"; ctx.fillStyle = "#f3f5f7"; ctx.font = `italic 800 118px ${DISP}`; ctx.fillText("MEUS SELOS", 70, 300);
   const img = await loadImg(o.avatar_url);
@@ -190,7 +195,7 @@ export async function cartaoSelos(o) {
   o.dist.forEach((d, i) => selo(ctx, xs[i % 3], 950 + Math.floor(i / 3) * 292, d.lab, d.nome, d.n));
   if (o.cid.length) {
     ctx.textAlign = "left"; ctx.fillStyle = VOLT; ctx.font = `italic 800 52px ${DISP}`; ctx.fillText("POR CIDADE", 70, 1510);
-    o.cid.slice(0, 3).forEach((d, i) => selo(ctx, xs[i], 1622, "📍", d.nome, d.n));
+    o.cid.slice(0, 3).forEach((d, i) => selo(ctx, xs[i], 1622, "📍", d.nome, d.n, bandeiras[i]));
     if (o.cid.length > 3) { ctx.textAlign = "right"; ctx.fillStyle = "#8d97a8"; ctx.font = `600 34px ${BODY}`; ctx.fillText(`+${o.cid.length - 3} cidades`, W - 70, 1510); }
   }
   ctx.textAlign = "center"; ctx.fillStyle = VOLT; ctx.beginPath(); ctx.roundRect(70, 1830, W - 140, 56, 12); ctx.fill();

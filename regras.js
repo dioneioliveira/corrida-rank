@@ -1,7 +1,7 @@
 // Mesma fórmula do banco (view v_provas). Usada só para explicar e simular; os pontos oficiais vêm do banco.
 export const PARTICIPACAO = 10;
-export const PODIO_GERAL = [20, 12, 6];
-export const PODIO_CATEGORIA = [10, 6, 3];
+export const PODIO_GERAL = [20, 12, 6, 4, 2];       // pódio vai até o 5º lugar
+export const PODIO_CATEGORIA = [10, 6, 3, 2, 1];
 export const PESOS = [[7, 1, "até 7 km"], [16, 1.25, "de 7 a 16 km"], [30, 1.75, "de 16 a 30 km"], [Infinity, 2.5, "acima de 30 km"]];
 
 export const peso = km => PESOS.find(p => km <= p[0])[1];
