@@ -3,7 +3,8 @@ import { compartilharProva, compartilharRanking, compartilharSelos } from "./car
 import { fmtNum, fmtKm, calcular, peso, PESOS, PODIO_GERAL, PODIO_CATEGORIA, PARTICIPACAO, nivelDe, proximoNivel } from "./regras.js";
 import { SUPABASE_URL, SUPABASE_ANON_KEY, YOUTUBE_URL, PIX_CHAVE, SHOPEE_LOJA_URL, SHOPEE_AVISO, PRODUTOS, VERSAO_TERMO, TEXTO_TERMO } from "./config.js";
 
-const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Sem a trava entre abas (navigator.locks): no iPhone, uma aba em segundo plano podia deixar o login esperando para sempre.
+const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { lock: (_nome, _tempo, fn) => fn() } });
 const $ = s => document.querySelector(s), app = $("#app"), tabs = $("#tabs");
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const toast = m => { const t = $("#toast"); t.textContent = m; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 2800); };
@@ -446,11 +447,17 @@ function show(t) {
 }
 tabs.querySelectorAll("button").forEach(b => b.onclick = () => show(b.dataset.tab));
 
-db.auth.onAuthStateChange(async (_e, session) => {
+async function iniciar(session) {
   if (!session) { me = null; return authView(); }
+  if (me && me.id === session.user.id) return;   // o Supabase repete "entrou" ao voltar para a aba; não recarrega a tela
   me = await loadProfile(session.user);
   if (!me) { toast("Não foi possível concluir o cadastro. Entre novamente."); await db.auth.signOut(); return; }
   isAdmin = !!(await db.rpc("is_admin")).data;
   tabs.hidden = false; show(tab);
+}
+// O corpo roda fora do callback (setTimeout): chamar o Supabase de dentro dele pode travar o login.
+db.auth.onAuthStateChange((evento, session) => {
+  if (evento === "TOKEN_REFRESHED" || evento === "USER_UPDATED") return;
+  setTimeout(() => iniciar(session), 0);
 });
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
