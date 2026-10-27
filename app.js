@@ -3,7 +3,7 @@ import { compartilharProva, compartilharRanking, compartilharSelos } from "./car
 import { bandeiraDaCidade } from "./bandeiras.js";
 import { reenquadrar } from "./foto.js";
 import { rpsHTML, metasHTML, ligarRpsMetas } from "./metas.js";
-import { calendarioView } from "./calendario.js";
+import { calendarioView, carregarMinhasProximas, proximasHTML, ligarProximas } from "./calendario.js";
 import { fmtNum, fmtKm, calcular, peso, PESOS, PODIO_GERAL, PODIO_CATEGORIA, PARTICIPACAO, nivelDe, proximoNivel } from "./regras.js";
 import { SUPABASE_URL, SUPABASE_ANON_KEY, YOUTUBE_URL, PIX_CHAVE, SHOPEE_LOJA_URL, SHOPEE_AVISO, PRODUTOS, APP_URL, VERSAO_TERMO, TEXTO_TERMO } from "./config.js";
 
@@ -435,12 +435,14 @@ function apoieView() {
 
 // ---------- Perfil ----------
 async function perfilView() {
-  const [{ data: l }, { data: rps }, { data: metas }] = await Promise.all([db.from("v_provas").select("*").eq("user_id", me.id),
-    db.from("rps").select("*").eq("user_id", me.id), db.from("metas").select("*").eq("user_id", me.id).order("criada_em", { ascending: false })]);
+  const [{ data: l }, { data: rps }, { data: metas }, proximas] = await Promise.all([db.from("v_provas").select("*").eq("user_id", me.id),
+    db.from("rps").select("*").eq("user_id", me.id), db.from("metas").select("*").eq("user_id", me.id).order("criada_em", { ascending: false }),
+    carregarMinhasProximas(ctx)]);
   app.innerHTML = `<h1>👤 Meu perfil</h1>
   <div class="card center">${avatar(me, "big")}<div class="grid2"><label class="link" style="display:block">📷 Trocar foto<input id="photo" type="file" accept="image/*" hidden></label>${me.avatar_url ? `<button type="button" class="link" id="reenq">✂️ Reenquadrar</button>` : "<span></span>"}</div>
     <div class="name">${esc(me.nome)}</div><div class="sub">📍 ${esc(me.cidade)}</div>
     ${badges(l || []).length ? `<div class="badges" style="margin-top:10px">${badges(l).map(b => `<div class="badge"><div>${b[1]}</div><span>${b[2]}</span></div>`).join("")}</div>` : ""}</div>
+  ${proximasHTML(ctx, proximas)}
   ${metasHTML(ctx, l || [], rps || [], metas || [])}
   ${rpsHTML(ctx, l || [], rps || [], true)}
   ${selosHTML(l || [], true)}
@@ -453,6 +455,7 @@ async function perfilView() {
   <button class="link" id="del" style="color:#ff6b6b">Excluir minha conta e meus dados</button>`;
   bindSelos(l || [], me);
   ligarRpsMetas(ctx, { recarregar: perfilView });
+  ligarProximas(ctx, proximas, { recarregar: perfilView, irAgenda: () => { f.quem = "calendario"; show("provas"); } });
   // Foto: escolhe a imagem, enquadra o rosto e salva (guarda também o original para reenquadrar depois)
   const gravarFoto = async (recorte, original) => {
     const bucket = db.storage.from("avatars"), opc = { upsert: true, contentType: "image/jpeg" };

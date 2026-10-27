@@ -84,3 +84,43 @@ function $form(box, recarregar, c) {
     if (error) return q("#evErr").textContent = error.message; toast("Prova anunciada! 📅"); recarregar();
   };
 }
+
+// ---------- Minhas próximas provas (aparece no perfil de cada usuário) ----------
+export async function carregarMinhasProximas(c) {
+  const { db } = c, me = c.me, hoje = hojeISO(), campos = "id, nome, data_evento, cidade, distancias, link, obs, user_id";
+  const [pres, meus] = await Promise.all([
+    db.from("evento_presencas").select(`status, eventos!inner(${campos})`).eq("user_id", me.id).gte("eventos.data_evento", hoje),
+    db.from("eventos").select(campos).eq("user_id", me.id).gte("data_evento", hoje)]);
+  const mapa = new Map();
+  (pres.data || []).forEach(p => p.eventos && mapa.set(p.eventos.id, { ...p.eventos, minha: p.status }));
+  (meus.data || []).forEach(e => { if (!mapa.has(e.id)) mapa.set(e.id, { ...e, minha: "anunciei" }); else mapa.get(e.id).anunciei = true; });
+  return [...mapa.values()].filter(e => e.data_evento >= hoje).sort((a, b) => a.data_evento.localeCompare(b.data_evento));
+}
+
+const diasAte = d => Math.round((new Date(d + "T12:00:00") - new Date(hojeISO() + "T12:00:00")) / 864e5);
+const quando = d => { const n = diasAte(d); return n === 0 ? "hoje!" : n === 1 ? "amanhã" : `em ${n} dias`; };
+
+export function proximasHTML(c, itens) {
+  const { esc } = c, ROT = { vou: "✅ Eu vou", talvez: "🤔 Talvez", anunciei: "📣 Anunciei" };
+  return `<h2>📅 Minhas próximas provas</h2>` + (itens.length
+    ? `<div class="card"><div class="sub" style="margin-bottom:6px">Próxima: <b style="color:var(--accent)">${esc(itens[0].nome)}</b> — ${quando(itens[0].data_evento)}</div>${itens.map(e => `<div class="row">
+        <div class="datacal" style="width:46px"><b style="font-size:22px">${e.data_evento.slice(8, 10)}</b><span>${new Date(e.data_evento + "T12:00:00").toLocaleDateString("pt-BR", { month: "short" }).replace(".", "")}</span></div>
+        <div class="grow"><div class="name">${esc(e.nome)}</div><div class="sub">📍 ${esc(e.cidade)}${e.distancias?.length ? " · " + e.distancias.map(d => d.toUpperCase()).join(" / ") : ""} · ${quando(e.data_evento)}</div>
+          <div class="sub"><span class="tag ${e.minha === "vou" ? "aprovada" : e.minha === "talvez" ? "pendente" : ""}">${ROT[e.minha]}</span>${e.anunciei && e.minha !== "anunciei" ? ` <span class="tag">📣 Anunciei</span>` : ""}</div></div>
+        <div style="text-align:right"><button class="link inline" data-pxcal="${e.id}" aria-label="Adicionar à agenda do celular">📆</button>${e.minha !== "anunciei" ? `<br><button class="link inline" data-pxsair="${e.id}" aria-label="Sair da lista">✕</button>` : ""}</div></div>`).join("")}</div>`
+    : `<div class="card empty">Você ainda não marcou nenhuma prova.<br>Abra o calendário e toque em “Vamos nesta!”.</div>`)
+    + `<button class="btn ghost" id="verAgenda" type="button" style="margin-bottom:6px">📅 Ver calendário de provas</button>`;
+}
+
+export function ligarProximas(c, itens, { recarregar, irAgenda }) {
+  const { db, toast } = c, me = c.me, $ = c.$;
+  if ($("#verAgenda")) $("#verAgenda").onclick = irAgenda;
+  document.querySelectorAll("[data-pxsair]").forEach(b => b.onclick = async () => {
+    const r = await db.from("evento_presencas").delete().eq("evento_id", b.dataset.pxsair).eq("user_id", me.id);
+    if (r.error) return toast(r.error.message); toast("Você saiu da lista."); recarregar();
+  });
+  document.querySelectorAll("[data-pxcal]").forEach(b => b.onclick = () => {
+    const ev = itens.find(x => x.id === b.dataset.pxcal), url = URL.createObjectURL(new Blob([icsEvento(ev)], { type: "text/calendar" }));
+    const a = document.createElement("a"); a.href = url; a.download = "prova.ics"; a.click(); setTimeout(() => URL.revokeObjectURL(url), 2000);
+  });
+}
