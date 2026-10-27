@@ -387,17 +387,28 @@ function novaProvaView() {
 }
 
 // ---------- Loja (Shopee) ----------
-function lojaView() {
-  const cats = [...new Set(PRODUTOS.map(p => p.categoria).filter(Boolean))];
+// Produtos: produtos.json (atualizado sozinho a partir da vitrine de afiliado) + os que estiverem em PRODUTOS no config.js
+let vitrine = null;
+async function carregarVitrine() {
+  if (vitrine) return vitrine;
+  let auto = [];
+  try { const r = await fetch("produtos.json", { cache: "no-store" }); if (r.ok) auto = (await r.json()).itens || []; } catch { /* sem o arquivo: usa só o config */ }
+  const manuais = PRODUTOS.map(p => ({ titulo: p.titulo, url: p.url, preco: p.preco, imagem: p.imagem, categoria: p.categoria || "Para corredores" }));
+  return vitrine = [...auto, ...manuais];
+}
+async function lojaView() {
+  app.innerHTML = `<h1>🛒 Loja do corredor</h1><p class="sub">Produtos de corrida de rua que eu indico, direto na Shopee.</p><div id="lojaBox" class="card">Carregando…</div>`;
+  const todos = await carregarVitrine(), cats = [...new Set(todos.map(p => p.categoria).filter(Boolean))];
+  if (!cats.includes(f.cat)) f.cat = "";
   const chip = (v, t) => `<button class="chip ${f.cat === v ? "on" : ""}" data-v="${esc(v)}">${esc(t)}</button>`;
-  const lista = PRODUTOS.filter(p => !f.cat || p.categoria === f.cat);
-  app.innerHTML = `<h1>🛒 Loja do corredor</h1>
-  <p class="sub">Produtos de corrida de rua que eu indico, direto na Shopee.</p>
-  ${SHOPEE_LOJA_URL ? `<a class="btn" style="display:block;text-decoration:none;margin:12px 0" href="${esc(SHOPEE_LOJA_URL)}" target="_blank" rel="noopener sponsored">Ver minha conta na Shopee</a>` : ""}
-  ${cats.length ? `<div class="chips">${chip("", "Todos")}${cats.map(c => chip(c, c)).join("")}</div>` : ""}
+  const lista = todos.filter(p => !f.cat || p.categoria === f.cat);
+  $("#lojaBox").outerHTML = `${SHOPEE_LOJA_URL ? `<a class="btn" style="display:block;text-decoration:none;margin:12px 0" href="${esc(SHOPEE_LOJA_URL)}" target="_blank" rel="noopener sponsored">Ver minha vitrine completa na Shopee</a>` : ""}
+  ${cats.length > 1 ? `<div class="chips">${chip("", "Todos")}${cats.map(c => chip(c, c)).join("")}</div>` : ""}
   ${lista.length ? `<div class="loja">${lista.map(p => `<a class="prod" href="${esc(p.url)}" target="_blank" rel="noopener sponsored">
-    ${p.imagem ? `<img src="${esc(p.imagem)}" alt="" loading="lazy">` : `<div class="ph">🏃</div>`}
-    <div class="pn">${esc(p.titulo)}</div>${p.preco ? `<div class="pp">${esc(p.preco)}</div>` : ""}<div class="pb">Ver na Shopee ›</div></a>`).join("")}</div>`
+    <div class="pimg">${p.imagem ? `<img src="${esc(p.imagem)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<div class="ph">🏃</div>`}${p.desconto ? `<span class="pdesc">${esc(p.desconto)}</span>` : ""}</div>
+    <div class="pn">${esc(p.titulo)}</div>
+    ${p.preco ? `<div class="pp">${esc(p.preco)}${p.dica ? `<small>${esc(p.dica)}</small>` : ""}</div>` : ""}${p.precoAntes ? `<div class="pa">${esc(p.precoAntes)}</div>` : ""}
+    ${p.vendidos ? `<div class="pv">${esc(p.vendidos.replace("Vendido(s)", "vendidos"))}</div>` : ""}<div class="pb">Ver na Shopee ›</div></a>`).join("")}</div>`
     : `<div class="card empty">Os produtos entram em breve. 🛍️</div>`}
   <p class="sub center" style="margin-top:14px">${esc(SHOPEE_AVISO)}</p>`;
   app.querySelectorAll(".chip").forEach(b => b.onclick = () => { f.cat = b.dataset.v; lojaView(); });

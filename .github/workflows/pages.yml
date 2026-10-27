@@ -2,6 +2,8 @@ name: Publicar site
 on:
   push:
     branches: [main]
+  schedule:
+    - cron: "11 */6 * * *"   # a cada 6 horas: renova a vitrine e republica
   workflow_dispatch:
 permissions:
   contents: read
@@ -18,6 +20,9 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - name: Atualizar produtos da vitrine
+        run: python3 scripts/sync_vitrine.py
+        continue-on-error: true   # se a Shopee falhar, publica com o produtos.json que já está no repositório
       - uses: actions/configure-pages@v5
         with:
           enablement: true   # tenta ativar o Pages sozinho
