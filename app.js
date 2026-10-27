@@ -2,6 +2,8 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 import { compartilharProva, compartilharRanking, compartilharSelos } from "./cartao.js";
 import { bandeiraDaCidade } from "./bandeiras.js";
 import { reenquadrar } from "./foto.js";
+import { rpsHTML, metasHTML, ligarRpsMetas } from "./metas.js";
+import { calendarioView } from "./calendario.js";
 import { fmtNum, fmtKm, calcular, peso, PESOS, PODIO_GERAL, PODIO_CATEGORIA, PARTICIPACAO, nivelDe, proximoNivel } from "./regras.js";
 import { SUPABASE_URL, SUPABASE_ANON_KEY, YOUTUBE_URL, PIX_CHAVE, SHOPEE_LOJA_URL, SHOPEE_AVISO, PRODUTOS, APP_URL, VERSAO_TERMO, TEXTO_TERMO } from "./config.js";
 
@@ -204,9 +206,10 @@ function bindSelos(l, p) {
 
 async function runnerView(uid, back = true) {
   if (back) stack.push(tab);
-  const [{ data: p }, { data: l }] = await Promise.all([
+  const [{ data: p }, { data: l }, { data: rps }] = await Promise.all([
     db.from("profiles").select("*").eq("id", uid).maybeSingle(),
-    db.from("v_provas").select("*").eq("user_id", uid).order("data_prova", { ascending: false })]);
+    db.from("v_provas").select("*").eq("user_id", uid).order("data_prova", { ascending: false }),
+    db.from("rps").select("*").eq("user_id", uid)]);
   if (!p) return toast("Corredor não encontrado");
   const best = DIST.filter(d => d[0] !== "outra").map(d => [d[1], Math.min(...(l || []).filter(x => x.dist_cat === d[0]).map(x => x.tempo_s))]).filter(b => isFinite(b[1]));
   const pts = (l || []).filter(x => x.ano === f.ano).reduce((t, x) => t + Number(x.pts_geral), 0);
@@ -215,7 +218,7 @@ async function runnerView(uid, back = true) {
   <div class="stats"><div><b>${(l || []).length}</b><span>provas</span></div><div><b>${fmtNum(pts, 0)}</b><span>pts ${f.ano}</span></div><div><b>${(l || []).filter(x => x.pos_geral <= 5 || (x.pos_cat && x.pos_cat <= 5)).length}</b><span>pódios</span></div></div></div>
   ${badges(l || []).length ? `<h2>Conquistas</h2><div class="badges">${badges(l).map(b => `<div class="badge"><div>${b[1]}</div><span>${b[2]}</span></div>`).join("")}</div>` : ""}
   ${selosHTML(l || [], uid === me.id)}
-  ${best.length ? `<h2>Melhores tempos</h2><div class="card">${best.map(b => `<div class="row"><div class="grow name">${b[0]}</div><div class="val">${fmtTime(b[1])}</div></div>`).join("")}</div>` : ""}
+  ${rpsHTML(ctx, l || [], rps || [], false)}
   <h2>Provas</h2>${(l || []).map(r => provaCard(r)).join("") || `<div class="card empty">Nenhuma prova aprovada ainda</div>`}`;
   $("#bk").onclick = () => { show(stack.pop() || "ranking"); };
   bindPrints(); bindSelos(l || [], p);
@@ -251,9 +254,10 @@ function bindPrints() {
 // ---------- Provas (feed + minhas) ----------
 async function provasView() {
   const chip = (v, t) => `<button class="chip ${f.quem === v ? "on" : ""}" data-v="${v}">${t}</button>`;
-  app.innerHTML = `<h1>🏁 Provas</h1><div class="chips">${chip("todos", "Últimas da comunidade")}${chip("minhas", "Minhas provas")}</div><div id="box">Carregando…</div>`;
+  app.innerHTML = `<h1>🏁 Provas</h1><div class="chips">${chip("todos", "Comunidade")}${chip("calendario", "📅 Calendário")}${chip("minhas", "Minhas provas")}</div><div id="box">Carregando…</div>`;
   app.querySelectorAll(".chip").forEach(b => b.onclick = () => { f.quem = b.dataset.v; provasView(); });
   if (f.quem === "minhas") return minhasView();
+  if (f.quem === "calendario") return calendarioView(ctx, $("#box"));
   const { data } = await db.from("v_provas").select("*").order("data_prova", { ascending: false }).limit(30);
   $("#box").innerHTML = (data || []).map(r => `<div class="feed"><div class="row link-row" data-u="${r.user_id}">${avatar(r)}<div class="grow"><div class="name">${esc(r.nome)}</div><div class="sub">${esc(r.cidade)}</div></div></div>${provaCard(r)}</div>`).join("")
     || `<div class="card empty">Nenhuma prova aprovada ainda.</div>`;
@@ -407,6 +411,8 @@ async function compartilharApp() {
   await copiarLink();
 }
 async function copiarLink() { try { await navigator.clipboard.writeText(LINK_APP); toast("Link copiado ✅"); } catch { toast(LINK_APP); } }
+// Contexto entregue aos módulos de metas/RPs e calendário
+const ctx = { db, $, esc, toast, avatar, fmtDate, fmtTime, fmtNum, parseTime, get me() { return me; }, get isAdmin() { return isAdmin; }, get linkApp() { return LINK_APP; } };
 const cartaoConvite = () => `<div class="card center"><div style="font-size:34px">📣</div><div class="name">Convide outros corredores</div>
   <p class="sub">Quanto mais gente, mais divertido o ranking.</p><button class="btn" id="shApp">Compartilhar o app</button>
   <div class="grid2" style="margin-top:8px"><a class="btn ghost" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(TEXTO_CONVITE + " " + LINK_APP)}">WhatsApp</a><button class="btn ghost" id="cpLink">Copiar link</button></div>
@@ -429,11 +435,14 @@ function apoieView() {
 
 // ---------- Perfil ----------
 async function perfilView() {
-  const { data: l } = await db.from("v_provas").select("*").eq("user_id", me.id);
+  const [{ data: l }, { data: rps }, { data: metas }] = await Promise.all([db.from("v_provas").select("*").eq("user_id", me.id),
+    db.from("rps").select("*").eq("user_id", me.id), db.from("metas").select("*").eq("user_id", me.id).order("criada_em", { ascending: false })]);
   app.innerHTML = `<h1>👤 Meu perfil</h1>
   <div class="card center">${avatar(me, "big")}<div class="grid2"><label class="link" style="display:block">📷 Trocar foto<input id="photo" type="file" accept="image/*" hidden></label>${me.avatar_url ? `<button type="button" class="link" id="reenq">✂️ Reenquadrar</button>` : "<span></span>"}</div>
     <div class="name">${esc(me.nome)}</div><div class="sub">📍 ${esc(me.cidade)}</div>
     ${badges(l || []).length ? `<div class="badges" style="margin-top:10px">${badges(l).map(b => `<div class="badge"><div>${b[1]}</div><span>${b[2]}</span></div>`).join("")}</div>` : ""}</div>
+  ${metasHTML(ctx, l || [], rps || [], metas || [])}
+  ${rpsHTML(ctx, l || [], rps || [], true)}
   ${selosHTML(l || [], true)}
   <form id="pf" class="card" style="margin-top:14px"><input name="nome" value="${esc(me.nome)}" required minlength="2" maxlength="60"><input name="cidade" value="${esc(me.cidade)}" required minlength="2" maxlength="60">
     <select name="sexo"><option value="M" ${me.sexo === "M" ? "selected" : ""}>Masculino</option><option value="F" ${me.sexo === "F" ? "selected" : ""}>Feminino</option></select>
@@ -443,6 +452,7 @@ async function perfilView() {
   <button class="btn ghost" id="out" style="margin-bottom:10px">Sair</button>
   <button class="link" id="del" style="color:#ff6b6b">Excluir minha conta e meus dados</button>`;
   bindSelos(l || [], me);
+  ligarRpsMetas(ctx, { recarregar: perfilView });
   // Foto: escolhe a imagem, enquadra o rosto e salva (guarda também o original para reenquadrar depois)
   const gravarFoto = async (recorte, original) => {
     const bucket = db.storage.from("avatars"), opc = { upsert: true, contentType: "image/jpeg" };

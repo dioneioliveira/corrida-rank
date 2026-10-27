@@ -165,9 +165,9 @@ function selo(ctx, cx, cy, anel, nome, n, img = null) {
     ctx.setLineDash([16, 14]); ctx.strokeStyle = "#3a424f"; ctx.lineWidth = 8; ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = "#4b5460";
   }
   if (img && nv) {   // bandeira da cidade dentro da medalha
+    const lado = (R - 8) * 2 * 0.84, k = Math.min(lado / img.width, lado / img.height), w = img.width * k, h = img.height * k;   // bandeira inteira, centralizada
     ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, R - 8, 0, 7); ctx.clip();
-    const k = Math.max(((R - 8) * 2) / img.width, ((R - 8) * 2) / img.height);
-    ctx.drawImage(img, cx - img.width * k / 2, cy - img.height * k / 2, img.width * k, img.height * k); ctx.restore();
+    ctx.drawImage(img, cx - w / 2, cy - h / 2, w, h); ctx.strokeStyle = "rgba(0,0,0,.45)"; ctx.lineWidth = 2; ctx.strokeRect(cx - w / 2, cy - h / 2, w, h); ctx.restore();
   } else { ctx.textAlign = "center"; ctx.font = `italic 800 ${anel.length > 2 ? 84 : 78}px ${DISP}`; ctx.fillText(anel, cx, cy + 28); }
   ctx.fillStyle = nv ? "#f3f5f7" : "#6d7685"; ctx.font = `700 36px ${BODY}`;
   let t = nome; while (ctx.measureText(t).width > 290 && t.length > 3) t = t.slice(0, -2); if (t !== nome) t += "…";
