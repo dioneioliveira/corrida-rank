@@ -43,10 +43,11 @@ function authView(signup = false) {
     <input name="email" type="email" placeholder="E-mail" required autocomplete="email">
     <input name="password" type="password" placeholder="Senha (mín. 6)" required minlength="6" autocomplete="${signup ? "new-password" : "current-password"}">
     ${signup ? `<div class="termo"><b>Termo de participação</b><p>${esc(TEXTO_TERMO)}</p>
-      <label class="check"><input type="checkbox" name="aceite" required> Li, entendi e aceito de livre e espontânea vontade.</label></div>` : ""}
+      <label class="check"><input type="checkbox" name="aceite" required> Li, entendi e aceito de livre e espontânea vontade, e concordo com os <a href="termos.html" target="_blank">Termos de Uso</a> e a <a href="privacidade.html" target="_blank">Política de Privacidade</a>.</label></div>` : ""}
     <div class="err" id="err"></div>
     <button class="btn">${signup ? "Aceitar e criar conta" : "Entrar"}</button>
     <button type="button" class="link" id="sw">${signup ? "Já tenho conta" : "Criar minha conta"}</button>
+    <div class="sub center" style="font-size:12px"><a href="termos.html">Termos de Uso</a> · <a href="privacidade.html">Política de Privacidade</a></div>
   </form>`;
   $("#sw").onclick = () => authView(!signup);
   $("#f").onsubmit = async e => {
@@ -469,7 +470,9 @@ async function perfilView() {
   ${isAdmin ? `<button class="btn" id="adm" style="margin-bottom:10px">🛡️ Aprovar provas</button>` : ""}
   <button class="btn ghost" id="convidar" style="margin-bottom:10px">📣 Convidar corredores</button>
   <button class="btn ghost" id="out" style="margin-bottom:10px">Sair</button>
-  <button class="link" id="del" style="color:#ff6b6b">Excluir minha conta e meus dados</button>`;
+  <button class="btn ghost" id="exp" style="margin-bottom:10px">⬇️ Exportar meus dados</button>
+  <button class="link" id="del" style="color:#ff6b6b">Excluir minha conta e meus dados</button>
+  <div class="sub center" style="font-size:12px;margin-top:14px"><a href="termos.html">Termos de Uso</a> · <a href="privacidade.html">Privacidade</a></div>`;
   bindSelos(l || [], me);
   ligarRpsMetas(ctx, { recarregar: perfilView });
   ligarProximas(ctx, proximas, { recarregar: perfilView, irAgenda: () => { f.quem = "calendario"; show("provas"); } });
@@ -505,6 +508,17 @@ async function perfilView() {
     if (error) return toast(error.message); Object.assign(me, v); toast("Perfil salvo ✅");
   };
   $("#out").onclick = () => db.auth.signOut();
+  $("#exp").onclick = async () => {
+    try {
+      const tabelas = [["provas", "user_id"], ["rps", "user_id"], ["metas", "user_id"], ["eventos", "user_id"], ["evento_presencas", "user_id"], ["denuncias", "denunciante"]];
+      const out = { exportado_em: new Date().toISOString(), perfil: me, email: (await db.auth.getSession()).data.session?.user?.email };
+      for (const [t, col] of tabelas) { const { data, error } = await db.from(t).select("*").eq(col, me.id); if (error) throw error; out[t] = data; }
+      const url = URL.createObjectURL(new Blob([JSON.stringify(out, null, 2)], { type: "application/json" }));
+      const a = Object.assign(document.createElement("a"), { href: url, download: "corrida-rank-meus-dados.json" });
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000);
+      toast("Arquivo gerado ✅");
+    } catch (err) { toast(err.message || "Não foi possível exportar"); }
+  };
   if (isAdmin) $("#adm").onclick = () => abrirAdmin(ctx, perfilView);
   $("#del").onclick = async () => {
     if (!confirm("Isso apaga sua conta, suas provas e seus prints, e não pode ser desfeito. Continuar?")) return;
@@ -554,7 +568,18 @@ async function iniciar(session) {
   me = await loadProfile(session.user);
   if (!me) { toast("Não foi possível concluir o cadastro. Entre novamente."); await db.auth.signOut(); return; }
   isAdmin = !!(await db.rpc("is_admin")).data;
-  tabs.hidden = false; show(tab);
+  tabs.hidden = false; show(tab); boasVindas();
+}
+// Aviso de boas-vindas: aparece uma vez por aparelho
+function boasVindas() {
+  try { if (localStorage.getItem("cr_bemvindo")) return; localStorage.setItem("cr_bemvindo", "1"); } catch { return; }
+  const f = document.createElement("div"); f.className = "foto-fundo";
+  f.innerHTML = `<div class="foto-caixa modal" role="dialog"><div class="foto-tit">Bem-vindo ao Corrida Rank 🏁</div>
+    <div class="sub" style="margin:0 0 12px;line-height:1.5">1. Em <b>Provas</b>, toque em <b>Novo</b> e cole o link do resultado: se o site confirmar, a prova entra verificada.<br>
+    2. Se não achar, preencha na mão e envie o <b>print</b>.<br>
+    3. Acompanhe pontos, selos e o <b>Ranking</b>. Só vale prova!</div>
+    <div class="foto-acoes"><button type="button" class="btn" data-a="ok">Bora correr</button></div></div>`;
+  document.body.appendChild(f); f.querySelector("[data-a=ok]").onclick = () => f.remove();
 }
 // O corpo roda fora do callback (setTimeout): chamar o Supabase de dentro dele pode travar o login.
 db.auth.onAuthStateChange((evento, session) => {

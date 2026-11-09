@@ -50,3 +50,7 @@ Campeonato de corredores de rua, mobile-first (PWA). **Só valem provas**: cada 
 - Quando o site não traz a posição na categoria, ela é calculada pela ordem da tabela (avisado na tela).
 - A função só abre links `https://` públicos (bloqueia endereços internos), com limite de 5 MB e 12 s.
 - Testes do leitor: tabela com Tempo Bruto/Líquido, acentos, entidades HTML, JSON, CSV, paginação e página sem tabela.
+
+## Documentos legais
+- [Termos de Uso](termos.html) e [Política de Privacidade](privacidade.html) (v1.0), ligados na tela de cadastro e no Perfil.
+- Perfil → "Exportar meus dados" gera um JSON com tudo do usuário (LGPD).
