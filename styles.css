@@ -148,3 +148,6 @@ a.btn.ghost{color:var(--text);text-align:center;text-decoration:none;display:blo
 .quem{display:flex;align-items:center;gap:10px;margin-top:6px}.faces{display:flex}.faces .avatar{width:30px;height:30px;font-size:13px;margin-left:-8px;border:2px solid var(--card)}.faces .avatar:first-child{margin-left:0}
 label.chip{cursor:pointer;user-select:none}label.chip.on{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
 button.btn.ghost.on{border-color:var(--accent);color:var(--accent)}
+
+/* janelas (modal) */
+.modal .modal-txt{width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);background:#0f1217;margin-bottom:8px;resize:vertical;font:inherit;color:var(--text)}

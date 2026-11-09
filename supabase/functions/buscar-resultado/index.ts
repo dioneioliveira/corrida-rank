@@ -82,14 +82,24 @@ async function buscarChiprun(u: URL, nome: string, peito: string) {
     aviso: candidatos.length ? null : "Não encontrei esse nome na Chiprun para essa modalidade. Confira o nome ou use o número de peito." };
 }
 
+// Limite de uso por usuário (janela de 10 minutos): 20 buscas e 5 gravações
+async function limitar(userId: string, funcao: "busca" | "salvar") {
+  const max = funcao === "busca" ? 20 : 5;
+  const desde = new Date(Date.now() - 10 * 60_000).toISOString();
+  const { count } = await admin.from("uso_funcao").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("funcao", funcao).gte("criada_em", desde);
+  if ((count ?? 0) >= max) throw new Error("Muitas consultas em pouco tempo. Aguarde alguns minutos e tente de novo.");
+  await admin.from("uso_funcao").insert({ user_id: userId, funcao });
+}
+
 const titulo = (t: string) => t.toLowerCase().replace(/(^|\s)\S/g, (x) => x.toUpperCase()).replace(/\b(De|Do|Da|Dos|Das|E)\b/g, (x) => x.toLowerCase());
 
 // Grava a prova já aprovada e SEM print, só quando o resultado foi lido do site e confere com o perfil do corredor.
 async function salvarVerificada(userId: string, alvo: URL, r: Awaited<ReturnType<typeof buscarChiprun>>) {
   const c = r.candidatos[0], m = r.meta;
   if (r.candidatos.length !== 1) throw new Error("Informe o número de peito para confirmar qual é o seu resultado.");
-  const { data: p } = await admin.from("profiles").select("nome,sexo").eq("id", userId).single();
+  const { data: p } = await admin.from("profiles").select("nome,sexo,suspenso").eq("id", userId).single();
   if (!p) throw new Error("Perfil não encontrado.");
+  if (p.suspenso) throw new Error("Sua conta está suspensa. Fale com a administração.");
   const nomeAtleta = norm(c.nome);
   if (!norm(p.nome).split(" ").filter(Boolean).every((t) => nomeAtleta.includes(t))) throw new Error(`O nome no resultado (${c.nome}) não confere com o seu perfil (${p.nome}). Envie com print para análise.`);
   if (c.sexo && c.sexo !== p.sexo) throw new Error("O sexo da categoria no resultado não confere com o seu perfil. Envie com print para análise.");
@@ -99,9 +109,11 @@ async function salvarVerificada(userId: string, alvo: URL, r: Awaited<ReturnType
   const { data, error } = await admin.from("provas").insert({
     user_id: userId, nome_prova: titulo(m.titulo).slice(0, 120), data_prova: m.data_prova, cidade_prova: m.cidade_prova ? titulo(m.cidade_prova) : null,
     dist_cat: m.dist_cat, distancia_km: m.distancia_km, tempo_s: c.tempo_s, inscritos: c.inscritos, pos_geral: c.pos_geral,
-    categoria: c.categoria, insc_cat: c.insc_cat, pos_cat: c.pos_cat, print_path: null, status: "aprovada", verificada: true, fonte_url: fonte,
+    categoria: c.categoria, insc_cat: c.insc_cat, pos_cat: c.pos_cat, print_path: null, status: "aprovada", verificada: true, fonte_url: fonte, peito: String(c.peito ?? "").replace(/\D/g, "") || null,
   }).select("id,nome_prova").single();
-  if (error) throw new Error(error.code === "23505" ? "Você já tem essa prova cadastrada." : error.message);
+  if (error) throw new Error(error.code === "23505"
+    ? (String(error.message).includes("provas_peito_unico") ? "Esse nº de peito já está registrado em outra conta nesta prova. Se o resultado é seu, toque em Denunciar na prova do outro corredor ou fale com a administração." : "Você já tem essa prova cadastrada.")
+    : error.message);
   return { ok: true, prova: data };
 }
 
@@ -117,6 +129,7 @@ Deno.serve(async (req) => {
 
     let alvo: URL; try { alvo = new URL(url); } catch { return json({ erro: "Link inválido." }, 400); }
     if (ehChiprun(alvo.hostname) && alvo.pathname.startsWith("/evento/")) {
+      await limitar(u.user.id, salvar === true ? "salvar" : "busca");
       const r = await buscarChiprun(alvo, String(nome ?? ""), String(peito ?? ""));
       // "confiavel": o resultado veio do site com data, distância, posições e totais completos
       const confiavel = r.candidatos.map((c) => !!(r.meta.data_prova && r.meta.dist_cat && c.tempo_s && c.pos_geral && c.inscritos && ((c.pos_cat == null) === (c.insc_cat == null))));
@@ -124,6 +137,7 @@ Deno.serve(async (req) => {
       return json({ ...r, confiavel });
     }
 
+    await limitar(u.user.id, "busca");
     const { texto, tipo, urlFinal } = await baixar(url);
     const r = analisar(texto, tipo, { nome: String(nome ?? ""), peito: String(peito ?? "") });
     let aviso: string | null = null;

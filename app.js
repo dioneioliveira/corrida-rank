@@ -3,6 +3,8 @@ import { compartilharProva, compartilharRanking, compartilharSelos } from "./car
 import { bandeiraDaCidade } from "./bandeiras.js";
 import { reenquadrar } from "./foto.js";
 import { rpsHTML, metasHTML, ligarRpsMetas } from "./metas.js";
+import { pedirTexto, confirmarModal } from "./modal.js";
+import { adminView as abrirAdmin } from "./admin.js";
 import { calendarioView, carregarMinhasProximas, proximasHTML, ligarProximas } from "./calendario.js";
 import { fmtNum, fmtKm, calcular, peso, PESOS, PODIO_GERAL, PODIO_CATEGORIA, PARTICIPACAO, nivelDe, proximoNivel } from "./regras.js";
 import { SUPABASE_URL, SUPABASE_ANON_KEY, YOUTUBE_URL, PIX_CHAVE, SHOPEE_LOJA_URL, SHOPEE_AVISO, PRODUTOS, APP_URL, VERSAO_TERMO, TEXTO_TERMO } from "./config.js";
@@ -238,9 +240,10 @@ function provaCard(r, head = "", foot = null) {
   <div class="sub">${head}${fmtDate(r.data_prova)}${r.cidade_prova ? " · " + esc(r.cidade_prova) : ""}</div></div><div class="bib">${r.dist_cat === "outra" ? fmtKm(r.distancia_km) + "K" : r.dist_cat.toUpperCase()}</div></div>
   <div class="stats"><div class="hl"><b>${fmtTime(r.tempo_s)}</b><span>tempo</span></div><div><b>${fmtTime(r.tempo_s / r.distancia_km)}</b><span>min/km</span></div><div><b>${r.pos_geral}º</b><span>de ${r.inscritos}</span></div>
   ${r.pos_cat ? `<div><b>${r.pos_cat}º</b><span>${esc(r.categoria || "categ.")} · ${r.insc_cat}</span></div>` : ""}</div>
-  ${foot ?? `<div class="sub">${pts}${origemProva(r)}${share}</div>`}</div>`;
+  ${foot ?? `<div class="sub">${pts}${origemProva(r)}${share}${r.user_id !== me.id ? ` · <button class="link inline" data-den-prova="${r.id}">🚩 denunciar</button>` : ""}</div>`}</div>`;
 }
 function bindPrints() {
+  app.querySelectorAll("[data-den-prova]").forEach(b => b.onclick = () => denunciar("prova", b.dataset.denProva));
   app.querySelectorAll("[data-share]").forEach(b => b.onclick = async () => {
     b.disabled = true; const r = await compartilharProva(cache.get(b.dataset.share), me).catch(() => "erro"); b.disabled = false;
     const msg = { baixado: "Cartão salvo! Agora é só postar 📲", erro: "Não foi possível gerar o cartão" }[r]; if (msg) toast(msg); });
@@ -300,6 +303,7 @@ function novaProvaView() {
     <input name="km" id="km" type="number" step="0.01" min="1" max="250" placeholder="Distância em km" hidden>
     <input name="tempo" placeholder="Tempo oficial (h:mm:ss ou mm:ss)" required pattern="\\d{1,2}(:\\d{2}){1,2}" inputmode="numeric">
     <div class="grid2"><input name="inscritos" type="number" min="1" placeholder="Inscritos (geral)" required><input name="pos_geral" type="number" min="1" placeholder="Posição geral" required></div>
+    <input name="peito" inputmode="numeric" pattern="[0-9]{1,8}" maxlength="8" placeholder="Nº de peito nesta prova (recomendado)">
     <input name="categoria" placeholder="Categoria, ex.: M 35-39 (opcional)">
     <div class="grid2"><input name="insc_cat" type="number" min="1" placeholder="Inscritos categ."><input name="pos_cat" type="number" min="1" placeholder="Posição categ."></div>
     <label class="filebox">📸 Print do resultado (obrigatório)<input name="print" type="file" accept="image/*" required></label>
@@ -328,7 +332,7 @@ function novaProvaView() {
       ${c.sexo && c.sexo !== me.sexo ? `<div class="warn">⚠️ O resultado indica sexo ${c.sexo === "M" ? "masculino" : "feminino"}, diferente do seu perfil.</div>` : ""}</button>`).join("");
     const preencher = c => {
       set("tempo", fmtTime(c.tempo_s)); set("inscritos", c.inscritos); set("pos_geral", c.pos_geral);
-      set("categoria", c.categoria ?? ""); set("insc_cat", c.insc_cat ?? ""); set("pos_cat", c.pos_cat ?? ""); set("fonte_url", data.fonte);
+      set("categoria", c.categoria ?? ""); set("insc_cat", c.insc_cat ?? ""); set("pos_cat", c.pos_cat ?? ""); set("fonte_url", data.fonte); set("peito", c.peito ?? "");
       const m = data.meta || {};
       if ((m.titulo || data.titulo) && !form.elements.nome_prova.value.trim()) set("nome_prova", (m.titulo || data.titulo).slice(0, 120));
       if (m.data_prova) set("data_prova", m.data_prova);
@@ -380,8 +384,9 @@ function novaProvaView() {
     const km = v.dist_cat === "outra" ? +v.km : DIST.find(d => d[0] === v.dist_cat)[2];
     const { error } = await db.from("provas").insert({ nome_prova: v.nome_prova.trim(), data_prova: v.data_prova, cidade_prova: v.cidade_prova.trim() || null,
       dist_cat: v.dist_cat, distancia_km: km, tempo_s: tempo, inscritos: +v.inscritos, pos_geral: +v.pos_geral,
-      categoria: v.categoria.trim() || null, insc_cat: n(v.insc_cat), pos_cat: n(v.pos_cat), print_path: path, user_id: me.id, fonte_url: v.fonte_url || null });
-    if (error) { await db.storage.from("prints").remove([path]); btn.disabled = false; return err(error.message); }
+      categoria: v.categoria.trim() || null, insc_cat: n(v.insc_cat), pos_cat: n(v.pos_cat), print_path: path, user_id: me.id, fonte_url: v.fonte_url || null, peito: (v.peito || "").replace(/\D/g, "") || null });
+    if (error) { await db.storage.from("prints").remove([path]); btn.disabled = false;
+      return err(error.code === "23505" ? (String(error.message).includes("peito") ? "Esse nº de peito já está registrado por outro corredor nesta prova. Se o resultado é seu, denuncie a prova dele ou fale com a administração." : "Você já enviou essa prova.") : error.message); }
     toast("Enviado! Assim que for aprovado, entra no ranking."); f.quem = "minhas"; provasView();
   };
 }
@@ -423,7 +428,7 @@ async function compartilharApp() {
 }
 async function copiarLink() { try { await navigator.clipboard.writeText(LINK_APP); toast("Link copiado ✅"); } catch { toast(LINK_APP); } }
 // Contexto entregue aos módulos de metas/RPs e calendário
-const ctx = { db, $, esc, toast, avatar, fmtDate, fmtTime, fmtNum, parseTime, get me() { return me; }, get isAdmin() { return isAdmin; }, get linkApp() { return LINK_APP; } };
+const ctx = { db, $, app, esc, toast, avatar, fmtDate, fmtTime, fmtNum, parseTime, pedirTexto, confirmarModal, denunciar: (t, id) => denunciar(t, id), provaCard: (...a) => provaCard(...a), bindPrints: () => bindPrints(), get me() { return me; }, get isAdmin() { return isAdmin; }, get linkApp() { return LINK_APP; } };
 const cartaoConvite = () => `<div class="card center"><div style="font-size:34px">📣</div><div class="name">Convide outros corredores</div>
   <p class="sub">Quanto mais gente, mais divertido o ranking.</p><button class="btn" id="shApp">Compartilhar o app</button>
   <div class="grid2" style="margin-top:8px"><a class="btn ghost" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(TEXTO_CONVITE + " " + LINK_APP)}">WhatsApp</a><button class="btn ghost" id="cpLink">Copiar link</button></div>
@@ -450,6 +455,7 @@ async function perfilView() {
     db.from("rps").select("*").eq("user_id", me.id), db.from("metas").select("*").eq("user_id", me.id).order("criada_em", { ascending: false }),
     carregarMinhasProximas(ctx)]);
   app.innerHTML = `<h1>👤 Meu perfil</h1>
+  ${me.suspenso ? `<div class="card" style="border-color:var(--bad)"><b style="color:var(--bad)">Conta suspensa</b><div class="sub">${esc(me.suspenso_motivo || "Fale com a administração.")} Você não aparece nos rankings e não pode publicar.</div></div>` : ""}
   <div class="card center">${avatar(me, "big")}<div class="grid2"><label class="link" style="display:block">📷 Trocar foto<input id="photo" type="file" accept="image/*" hidden></label>${me.avatar_url ? `<button type="button" class="link" id="reenq">✂️ Reenquadrar</button>` : "<span></span>"}</div>
     <div class="name">${esc(me.nome)}</div><div class="sub">📍 ${esc(me.cidade)}</div>
     ${badges(l || []).length ? `<div class="badges" style="margin-top:10px">${badges(l).map(b => `<div class="badge"><div>${b[1]}</div><span>${b[2]}</span></div>`).join("")}</div>` : ""}</div>
@@ -499,7 +505,7 @@ async function perfilView() {
     if (error) return toast(error.message); Object.assign(me, v); toast("Perfil salvo ✅");
   };
   $("#out").onclick = () => db.auth.signOut();
-  if (isAdmin) $("#adm").onclick = adminView;
+  if (isAdmin) $("#adm").onclick = () => abrirAdmin(ctx, perfilView);
   $("#del").onclick = async () => {
     if (!confirm("Isso apaga sua conta, suas provas e seus prints, e não pode ser desfeito. Continuar?")) return;
     const { data: ps } = await db.from("provas").select("print_path").eq("user_id", me.id);
@@ -511,19 +517,12 @@ async function perfilView() {
   };
 }
 
-// ---------- Administração ----------
-async function adminView() {
-  app.innerHTML = `<button class="link" id="bk" style="text-align:left">← Voltar</button><h1>🛡️ Provas em análise</h1><div id="box">Carregando…</div>`;
-  $("#bk").onclick = () => perfilView();
-  const { data } = await db.from("provas").select("*, profiles(nome, cidade, sexo)").eq("status", "pendente").order("created_at");
-  $("#box").innerHTML = (data || []).map(r => provaCard(r, r.profiles ? `${esc(r.profiles.nome)} (${esc(r.profiles.cidade)}, ${esc(r.profiles.sexo)}) · ` : "", `<button class="link inline" data-print="${esc(r.print_path)}">ver print</button>${r.fonte_url ? ` · <a class="link inline" href="${esc(r.fonte_url)}" target="_blank" rel="noopener">🔎 ver fonte</a>` : ""}
-    <div class="grid2" style="margin-top:8px"><button class="btn" data-ok="${r.id}">Aprovar</button><button class="btn ghost" data-no="${r.id}">Rejeitar</button></div>`)).join("")
-    || `<div class="card empty">Nada pendente 🎉</div>`;
-  bindPrints();
-  app.querySelectorAll("[data-ok]").forEach(b => b.onclick = async () => { await db.from("provas").update({ status: "aprovada", motivo: null }).eq("id", b.dataset.ok); adminView(); });
-  app.querySelectorAll("[data-no]").forEach(b => b.onclick = async () => {
-    const motivo = prompt("Motivo da rejeição (o corredor verá):"); if (motivo === null) return;
-    await db.from("provas").update({ status: "rejeitada", motivo: motivo.trim() || "Print não confere com os dados informados" }).eq("id", b.dataset.no); adminView(); });
+// ---------- Denúncias ----------
+async function denunciar(tipo, id) {
+  const motivo = await pedirTexto({ titulo: "Denunciar", dica: "Conte o que está errado (ex.: resultado de outra pessoa, prova que não existe, spam). A administração vai analisar.", rotulo: "Enviar denúncia", minimo: 5 });
+  if (!motivo) return;
+  const { error } = await db.from("denuncias").insert({ denunciante: me.id, alvo_tipo: tipo, alvo_id: id, motivo });
+  toast(error ? (error.code === "23505" ? "Você já denunciou este item." : error.message) : "Denúncia enviada. Obrigado! 🙏");
 }
 
 // ---------- Utilidades ----------

@@ -38,7 +38,7 @@ export async function calendarioView(c, box) {
         <div class="sub"><b>${vou.length}</b> ${vou.length === 1 ? "vai" : "vão"} · ${talvez.length} talvez</div></div>
       <div class="grid2" style="margin:8px 0"><button class="btn ${minha === "vou" ? "" : "ghost"}" data-pres="vou" data-ev="${e.id}">${minha === "vou" ? "✅ Eu vou!" : "Vamos nesta!"}</button>
         <button class="btn ghost ${minha === "talvez" ? "on" : ""}" data-pres="talvez" data-ev="${e.id}">${minha === "talvez" ? "🤔 Talvez ✓" : "🤔 Talvez"}</button></div>
-      <div class="sub">${e.link ? `<a class="link inline" href="${esc(e.link)}" target="_blank" rel="noopener">🔗 site e inscrição</a> · ` : ""}<button class="link inline" data-cal="${e.id}">📆 agenda</button> · <button class="link inline" data-chamar="${e.id}">📣 chamar a galera</button>${dono || c.isAdmin ? ` · <button class="link inline" data-evdel="${e.id}">excluir</button>` : ""}</div>
+      <div class="sub">${e.link ? `<a class="link inline" href="${esc(e.link)}" target="_blank" rel="noopener">🔗 site e inscrição</a> · ` : ""}<button class="link inline" data-cal="${e.id}">📆 agenda</button> · <button class="link inline" data-chamar="${e.id}">📣 chamar a galera</button>${dono || c.isAdmin ? ` · <button class="link inline" data-evdel="${e.id}">excluir</button>` : ""}${!dono ? ` · <button class="link inline" data-evden="${e.id}">🚩 denunciar</button>` : ""}</div>
       <div class="sub" style="margin-top:4px">Anunciada por ${esc(e.profiles?.nome ?? "—")}</div></div>`;
   };
   const chip = (on, t, a) => `<button class="chip ${on ? "on" : ""}" ${a}>${t}</button>`;
@@ -62,6 +62,7 @@ export async function calendarioView(c, box) {
       : await db.from("evento_presencas").upsert({ evento_id: ev.id, user_id: me.id, status: novo }, { onConflict: "evento_id,user_id" });
     if (r.error) return toast(r.error.message); if (novo === "vou" && atual !== "vou") toast("Boa! Você está na lista 🏃"); recarregar();
   });
+  box.querySelectorAll("[data-evden]").forEach(b => b.onclick = () => c.denunciar("evento", b.dataset.evden));
   box.querySelectorAll("[data-evdel]").forEach(b => b.onclick = async () => { if (!confirm("Excluir este anúncio?")) return; await db.from("eventos").delete().eq("id", b.dataset.evdel); recarregar(); });
   box.querySelectorAll("[data-cal]").forEach(b => b.onclick = () => {
     const ev = todos.find(x => x.id === b.dataset.cal), url = URL.createObjectURL(new Blob([icsEvento(ev)], { type: "text/calendar" }));
