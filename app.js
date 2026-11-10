@@ -98,16 +98,31 @@ async function rankingView() {
   const tempos = f.tipo === "tempos";
   if (tempos && !f.dist) f.dist = "5k";
   const avisos = await contarAvisos(ctx).catch(() => 0);
+  if (f.tipo === "comunidade") {
+    const { data: com, error: errCom } = await db.rpc("comunidade", { p_ano: f.ano, p_cidade: f.cidade || null });
+    app.innerHTML = `<div class="provahead"><h1>🏆 Ranking</h1><button class="ico" id="sino" aria-label="Avisos">🔔${avisos ? `<b class="dot">${avisos}</b>` : ""}</button></div>${temporadaHTML(f.ano)}
+    <div class="chips">${chip("tipo", "geral", "Geral")}${chip("tipo", "categoria", "Por idade")}${chip("tipo", "tempos", "Melhores tempos")}${chip("tipo", "equipes", "Equipes")}${chip("tipo", "comunidade", "Comunidade")}</div>
+    <div class="chips">${anos.map(a => chip("ano", a, a)).join("")}</div>
+    <select id="cidade"><option value="">🌎 Todas as cidades</option>${(cidades || []).map(c => `<option value="${esc(c.cidade)}" ${f.cidade === c.cidade ? "selected" : ""}>${esc(c.cidade)} (${c.corredores})</option>`).join("")}</select>
+    ${errCom ? `<div class="card empty">${esc(errCom.message)}</div>` : `<div class="sub" style="margin:4px 0 8px">${(com || []).length} corredor(es) na comunidade</div><div class="card">${(com || []).map(r => `<div class="row link-row ${r.user_id === me.id ? "me" : ""}" data-u="${r.user_id}">${avatar(r)}
+      <div class="grow"><div class="name">${esc(r.nome)}</div><div class="sub">${esc(r.cidade)} · ${r.sexo === "M" ? "Masc." : "Fem."}${r.equipe ? " · 👟 " + esc(r.equipe) : ""}</div></div>
+      <div class="val">${fmtNum(r.pontos)}<div class="sub">${r.provas} prova(s)</div></div></div>`).join("")}</div>`}`;
+    app.querySelectorAll(".chip").forEach(b => b.onclick = () => { f[b.dataset.k] = isNaN(b.dataset.v) || b.dataset.v === "" ? b.dataset.v : +b.dataset.v; rankingView(); });
+    $("#cidade").onchange = e => { f.cidade = e.target.value; rankingView(); };
+    $("#sino").onclick = () => avisosView(ctx, () => show("ranking"));
+    app.querySelectorAll("[data-u]").forEach(r => r.onclick = () => runnerView(r.dataset.u));
+    return;
+  }
   if (f.tipo === "equipes") {
     app.innerHTML = `<div class="provahead"><h1>🏆 Ranking</h1><button class="ico" id="sino" aria-label="Avisos">🔔${avisos ? `<b class="dot">${avisos}</b>` : ""}</button></div>${temporadaHTML(f.ano)}
-    <div class="chips">${chip("tipo", "geral", "Geral")}${chip("tipo", "categoria", "Por idade")}${chip("tipo", "tempos", "Melhores tempos")}${chip("tipo", "equipes", "Equipes")}</div>
+    <div class="chips">${chip("tipo", "geral", "Geral")}${chip("tipo", "categoria", "Por idade")}${chip("tipo", "tempos", "Melhores tempos")}${chip("tipo", "equipes", "Equipes")}${chip("tipo", "comunidade", "Comunidade")}</div>
     <div class="chips">${anos.map(a => chip("ano", a, a)).join("")}</div>${await equipesRankingHTML(ctx, f.ano)}${patrocinadoresHTML(ctx, PATROCINADORES)}`;
     app.querySelectorAll(".chip").forEach(b => b.onclick = () => { f[b.dataset.k] = isNaN(b.dataset.v) || b.dataset.v === "" ? b.dataset.v : +b.dataset.v; rankingView(); });
     $("#sino").onclick = () => avisosView(ctx, () => show("ranking"));
     return;
   }
   app.innerHTML = `<div class="provahead"><h1>🏆 Ranking</h1><button class="ico" id="sino" aria-label="Avisos">🔔${avisos ? `<b class="dot">${avisos}</b>` : ""}</button></div>${temporadaHTML(f.ano)}
-  <div class="chips">${chip("tipo", "geral", "Geral")}${chip("tipo", "categoria", "Por idade")}${chip("tipo", "tempos", "Melhores tempos")}${chip("tipo", "equipes", "Equipes")}</div>
+  <div class="chips">${chip("tipo", "geral", "Geral")}${chip("tipo", "categoria", "Por idade")}${chip("tipo", "tempos", "Melhores tempos")}${chip("tipo", "equipes", "Equipes")}${chip("tipo", "comunidade", "Comunidade")}</div>
   <div class="chips">${chip("sexo", "M", "Masculino")}${chip("sexo", "F", "Feminino")}${anos.map(a => chip("ano", a, a)).join("")}</div>
   <div class="chips">${tempos ? "" : chip("dist", "", "Todas")}${DIST.filter(d => d[0] !== "outra").map(d => chip("dist", d[0], d[1])).join("")}</div>
   <select id="cidade"><option value="">🌎 Todas as cidades</option>${(cidades || []).map(c => `<option value="${esc(c.cidade)}" ${f.cidade === c.cidade ? "selected" : ""}>${esc(c.cidade)} (${c.corredores})</option>`).join("")}</select>

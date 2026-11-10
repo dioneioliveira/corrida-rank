@@ -55,6 +55,7 @@ Campeonato de corredores de rua, mobile-first (PWA). **Só valem provas**: cada 
 - [Termos de Uso](termos.html) e [Política de Privacidade](privacidade.html) (v1.0), ligados na tela de cadastro e no Perfil.
 - Perfil → "Exportar meus dados" gera um JSON com tudo do usuário (LGPD).
 - Tema claro/escuro/automático em Perfil → Aparência; o cartão de convite (aba Apoie) tem QR Code (`qr.js`, gerado com qrcode-generator, MIT).
+- Ranking → aba "Comunidade": lista todos os corredores cadastrados (mesmo sem prova pontuada). Migração `0008_comunidade.sql`.
 
 ## Social (Etapa C)
 Seguir corredores e avisos (🔔 no Ranking), equipes com ranking, hall da fama, faixa de temporada, destaque de provas (admin) e `PATROCINADORES` em `config.js`. Migração: `supabase/migrations/0006_social_equipes_avisos.sql`.
