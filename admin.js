@@ -1,5 +1,5 @@
 // Painel de administração: provas pendentes, denúncias, provas, usuários e registro de ações.
-const ABAS = [["pendentes", "⏳ Pendentes"], ["denuncias", "🚩 Denúncias"], ["provas", "🏁 Provas"], ["usuarios", "👥 Usuários"], ["registro", "📜 Registro"]];
+const ABAS = [["pendentes", "⏳ Pendentes"], ["denuncias", "🚩 Denúncias"], ["provas", "🏁 Provas"], ["usuarios", "👥 Usuários"], ["registro", "📜 Registro"], ["erros", "🐞 Erros"]];
 const estado = { aba: "pendentes", busca: "" };
 
 export async function adminView(c, voltar) {
@@ -9,7 +9,7 @@ export async function adminView(c, voltar) {
   $("#bk").onclick = voltar;
   app.querySelectorAll("[data-aba]").forEach(b => b.onclick = () => { estado.aba = b.dataset.aba; adminView(c, voltar); });
   const recarregar = () => adminView(c, voltar);
-  await ({ pendentes, denuncias, provas, usuarios, registro }[estado.aba])(c, $("#adBox"), recarregar);
+  await ({ pendentes, denuncias, provas, usuarios, registro, erros }[estado.aba])(c, $("#adBox"), recarregar);
 }
 
 const log = (c, acao, alvo_tipo, alvo_id, detalhe) => c.db.from("auditoria").insert({ admin_id: c.me.id, acao, alvo_tipo, alvo_id: String(alvo_id), detalhe: detalhe ?? null });
@@ -103,4 +103,13 @@ async function registro(c, box) {
   const { db, esc } = c;
   const { data } = await db.from("auditoria").select("*, profiles!auditoria_admin_id_fkey(nome)").order("criada_em", { ascending: false }).limit(60);
   box.innerHTML = (data || []).map(a => `<div class="row"><div class="grow"><div class="name">${esc(a.acao)}</div><div class="sub">${esc(a.profiles?.nome ?? "—")} · ${new Date(a.criada_em).toLocaleString("pt-BR")}${a.detalhe ? " · " + esc(a.detalhe) : ""}</div></div></div>`).join("") || `<div class="card empty">Nenhuma ação registrada ainda.</div>`;
+}
+
+async function erros(c, box, recarregar) {
+  const { db, esc, toast } = c;
+  const { data, error } = await db.from("erros_app").select("*").order("criado_em", { ascending: false }).limit(60);
+  if (error) { box.innerHTML = `<div class="card empty">${esc(error.message)}</div>`; return; }
+  box.innerHTML = !(data || []).length ? `<div class="card empty">Nenhum erro registrado 🎉</div>`
+    : (data.map(e => `<div class="row"><div class="grow"><div class="name" style="font-size:14px">${esc(e.mensagem)}</div><div class="sub">${esc(e.origem || "")} · ${new Date(e.criado_em).toLocaleString("pt-BR")}</div></div></div>`).join("") + `<button class="link" id="erLimpar">Limpar lista</button>`);
+  const b = box.querySelector("#erLimpar"); if (b) b.onclick = async () => { await db.from("erros_app").delete().gte("id", 0); toast("Lista limpa"); recarregar(); };
 }

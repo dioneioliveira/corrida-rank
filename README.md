@@ -57,3 +57,15 @@ Campeonato de corredores de rua, mobile-first (PWA). **Só valem provas**: cada 
 
 ## Social (Etapa C)
 Seguir corredores e avisos (🔔 no Ranking), equipes com ranking, hall da fama, faixa de temporada, destaque de provas (admin) e `PATROCINADORES` em `config.js`. Migração: `supabase/migrations/0006_social_equipes_avisos.sql`.
+
+## Qualidade e operação (Etapa D)
+- **Testes:** `.github/workflows/tests.yml` roda em PRs e branches (sintaxe dos módulos, `tests/unit.mjs` com as regras de pontuação, manifest/produtos). Localmente: `node tests/unit.mjs`.
+- **Monitor de erros:** falhas do navegador vão para a tabela `erros_app` (até 5 por visita); a administração vê em Perfil → Administração → 🐞 Erros. Migração `0007_monitor_erros.sql`.
+
+### Ativar o e-mail de aceite (Resend)
+1. Crie conta grátis em resend.com e gere uma **API Key**.
+2. No Supabase: Edge Functions → Secrets → adicione `RESEND_API_KEY` com a chave.
+3. Sem domínio próprio, o Resend só envia para o e-mail da sua própria conta (dioneioliveirasbs@gmail.com), o que basta, pois o aviso vai para você.
+
+### E-mails de confirmação de cadastro (SMTP)
+O envio padrão do Supabase tem limite baixo por hora. Para muitos cadastros: Supabase → Authentication → SMTP Settings → use o SMTP do Resend (host `smtp.resend.com`, usuário `resend`, senha = API Key).

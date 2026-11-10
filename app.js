@@ -601,4 +601,12 @@ db.auth.onAuthStateChange((evento, session) => {
   if (evento === "TOKEN_REFRESHED" || evento === "USER_UPDATED") return;
   setTimeout(() => iniciar(session), 0);
 });
+// Monitor de erros: registra falhas do navegador (até 5 por visita) para a administração
+let _nErros = 0;
+function registrarErro(msg, origem) {
+  if (_nErros >= 5 || !me) return; _nErros++;
+  db.from("erros_app").insert({ user_id: me.id, mensagem: String(msg || "erro").slice(0, 500), origem: String(origem || "").slice(0, 300), agente: navigator.userAgent.slice(0, 200) }).then(() => {}, () => {});
+}
+window.addEventListener("error", e => registrarErro(e.message, `${(e.filename || "").split("/").pop()}:${e.lineno}`));
+window.addEventListener("unhandledrejection", e => registrarErro(e.reason?.message || e.reason, "promise"));
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");

@@ -1,0 +1,21 @@
+name: Testes
+on:
+  pull_request:
+  push:
+    branches-ignore: [main]
+  workflow_dispatch:
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Sintaxe dos módulos
+        run: for f in *.js; do node --check "$f" || exit 1; done
+      - name: Regras de pontuação
+        run: node tests/unit.mjs
+      - name: Páginas e manifest
+        run: |
+          python3 -c "import json;json.load(open('manifest.json'));json.load(open('produtos.json'))"
+          for p in index termos privacidade; do test -s $p.html || exit 1; done
