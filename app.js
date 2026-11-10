@@ -9,7 +9,7 @@ import { calendarioView, carregarMinhasProximas, proximasHTML, ligarProximas } f
 import { fmtNum, fmtKm, calcular, peso, PESOS, PODIO_GERAL, PODIO_CATEGORIA, PARTICIPACAO, nivelDe, proximoNivel } from "./regras.js";
 import { qrSvg } from "./qr.js";
 import { contarAvisos, avisosView, seguirHTML, ligarSeguir, temporadaHTML, patrocinadoresHTML, equipesRankingHTML, hallHTML, equipeHTML, ligarEquipe } from "./social.js";
-import { SUPABASE_URL, SUPABASE_ANON_KEY, YOUTUBE_URL, PIX_CHAVE, APP_URL, PATROCINADORES, VERSAO_TERMO, TEXTO_TERMO } from "./config.js";
+import { SUPABASE_URL, SUPABASE_ANON_KEY, YOUTUBE_URL, CANAL_SITE_URL, PIX_CHAVE, APP_URL, PATROCINADORES, VERSAO_TERMO, TEXTO_TERMO } from "./config.js";
 
 // Sem a trava entre abas (navigator.locks): no iPhone, uma aba em segundo plano podia deixar o login esperando para sempre.
 const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { lock: (_nome, _tempo, fn) => fn() } });
@@ -48,6 +48,7 @@ function authView(signup = false) {
   tabs.hidden = true;
   app.innerHTML = `<div class="hero"><div class="logo">Corrida<br><b>Rank</b></div>
   <p class="sub">O campeonato dos corredores de rua.<br>Aqui só vale prova. Bora pra linha de chegada?</p><div class="strip"></div></div>
+  <div class="aviso-fun">🎉 O Corrida Rank <b>não é uma competição oficial</b>: é uma brincadeira entre corredores, só para diversão e entretenimento. Os resultados oficiais são sempre os do organizador de cada prova.</div>
   <form id="f" class="card">
     ${signup ? `<input name="nome" placeholder="Seu nome" required minlength="2" maxlength="60" autocomplete="name">
     <input name="cidade" placeholder="Cidade onde mora" required minlength="2" maxlength="60">
@@ -129,6 +130,7 @@ async function rankingView() {
   <div class="mebar" id="meBar" hidden></div>
   <div id="list" class="card">Carregando…</div>
   ${patrocinadoresHTML(ctx, PATROCINADORES)}<div id="hall"></div>
+  <div class="aviso-fun">🎉 O Corrida Rank <b>não é uma competição oficial</b>: é uma brincadeira entre corredores, só para diversão e entretenimento. Os resultados oficiais são sempre os do organizador de cada prova.</div>
   <button class="link" id="comoBtn">❓ Como funciona a pontuação</button>
   <details class="card" id="como"><summary>Como funciona a pontuação</summary>${comoHTML()}</details>`;
   $("#sino").onclick = () => avisosView(ctx, () => show("ranking"));
@@ -189,9 +191,15 @@ function comoHTML() {
   <p><b>Dois placares:</b> o <i>Geral</i> usa sua posição entre todos os inscritos; o <i>Por idade</i> usa sua posição na sua categoria. Os dois são separados por sexo e por ano. A categoria é opcional: sem ela você pontua só no geral.</p>
   <p><b>Exemplo:</b> 567º de 1.000 numa prova de 5 km = (10 + 43,4) × 1 = <b>53,4 pts</b>.</p>
   <h3>Simule a sua</h3>
-  <div class="grid2"><select id="sDist">${DIST.filter(d => d[2]).map(d => `<option value="${d[2]}" ${d[0] === "5k" ? "selected" : ""}>${d[1]}</option>`).join("")}</select>
-    <div></div><input id="sIns" type="number" min="1" placeholder="Inscritos (geral)" value="1000"><input id="sPos" type="number" min="1" placeholder="Sua posição" value="567">
-    <input id="sInsC" type="number" min="1" placeholder="Inscritos na categoria" value="230"><input id="sPosC" type="number" min="1" placeholder="Posição na categoria" value="125"></div>
+  <p class="sub" style="margin:0 0 10px">Digite os números de uma prova e veja quantos pontos ela renderia.</p>
+  <div class="grid2">
+    <label class="fld" style="grid-column:1/-1"><span>Distância da prova</span><small>Quanto maior a distância, maior o peso dos pontos.</small>
+      <select id="sDist">${DIST.filter(d => d[2]).map(d => `<option value="${d[2]}" ${d[0] === "5k" ? "selected" : ""}>${d[1]}</option>`).join("")}</select></label>
+    <label class="fld"><span>Total de inscritos</span><small>Todos que terminaram a prova.</small><input id="sIns" type="number" min="1" placeholder="Ex.: 1000" value="1000"></label>
+    <label class="fld"><span>Sua posição geral</span><small>Seu lugar entre todos (1 = campeão).</small><input id="sPos" type="number" min="1" placeholder="Ex.: 567" value="567"></label>
+    <label class="fld"><span>Inscritos da categoria</span><small>Quantos correram na sua faixa de idade.</small><input id="sInsC" type="number" min="1" placeholder="Ex.: 230" value="230"></label>
+    <label class="fld"><span>Posição na categoria</span><small>Seu lugar na sua faixa de idade.</small><input id="sPosC" type="number" min="1" placeholder="Ex.: 125" value="125"></label>
+  </div>
   <div id="sOut" class="simout"></div></div>`;
 }
 function bindSimulador() {
@@ -460,10 +468,11 @@ const ligarConvite = () => { $("#shApp").onclick = compartilharApp; $("#cpLink")
 // ---------- Apoie ----------
 function apoieView() {
   app.innerHTML = `<h1>💛 Apoie o projeto</h1>
+  <div class="aviso-fun">🎉 O Corrida Rank <b>não é uma competição oficial</b>: é uma brincadeira entre corredores, só para diversão e entretenimento. Os resultados oficiais são sempre os do organizador de cada prova.</div>
   ${cartaoConvite()}
   <p class="sub">O Corrida Rank é feito de corredor para corredor. Se quiser incentivar, fique à vontade — é totalmente opcional.</p>
   <div class="card center"><div style="font-size:34px">▶️</div><div class="name">Canal no YouTube</div><p class="sub">Treinos, provas e bastidores.</p>
-    ${YOUTUBE_URL ? `<a class="btn" style="display:block;text-decoration:none" href="${esc(YOUTUBE_URL)}" target="_blank" rel="noopener">Abrir canal</a>` : `<button class="btn ghost" disabled>Em breve</button>`}</div>
+    ${YOUTUBE_URL ? `<a class="btn" style="display:block;text-decoration:none" href="${esc(YOUTUBE_URL)}" target="_blank" rel="noopener">Abrir canal</a>${CANAL_SITE_URL ? `<a class="btn ghost" style="display:block;text-decoration:none;margin-top:8px" href="${esc(CANAL_SITE_URL)}" target="_blank" rel="noopener">🌐 Site do canal</a>` : ""}` : `<button class="btn ghost" disabled>Em breve</button>`}</div>
   <div class="card center"><div style="font-size:34px">💸</div><div class="name">Doe via PIX</div><p class="sub">Qualquer valor ajuda. Chave PIX (e-mail):</p>
     <div class="pix">${esc(PIX_CHAVE)}</div><button class="btn" id="cp">Copiar chave PIX</button>
     <p class="sub">Abra o app do seu banco → PIX → Pagar com chave → cole a chave. Doações são voluntárias e não dão vantagem no ranking.</p></div>`;

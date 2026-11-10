@@ -1,4 +1,4 @@
-const C = "corrida-v25", SHELL = ["./", "index.html", "app.js", "cartao.js", "foto.js", "metas.js", "calendario.js", "modal.js", "social.js", "qr.js", "admin.js", "bandeiras.js", "regras.js", "icon-192.png", "icon-512.png", "styles.css", "config.js", "icon.svg"];
+const C = "corrida-v26", SHELL = ["./", "index.html", "app.js", "cartao.js", "foto.js", "metas.js", "calendario.js", "modal.js", "social.js", "qr.js", "admin.js", "bandeiras.js", "regras.js", "icon-192.png", "icon-512.png", "styles.css", "config.js", "icon.svg"];
 self.addEventListener("install", e => e.waitUntil(caches.open(C).then(c => c.addAll(SHELL))));
 self.addEventListener("activate", e => e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== C).map(k => caches.delete(k))))));
 self.addEventListener("fetch", e => {
