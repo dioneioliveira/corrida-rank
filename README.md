@@ -56,6 +56,7 @@ Campeonato de corredores de rua, mobile-first (PWA). **Só valem provas**: cada 
 - Perfil → "Exportar meus dados" gera um JSON com tudo do usuário (LGPD).
 - Tema claro/escuro/automático em Perfil → Aparência; o cartão de convite (aba Apoie) tem QR Code (`qr.js`, gerado com qrcode-generator, MIT).
 - Ranking → aba "Comunidade": lista todos os corredores cadastrados (mesmo sem prova pontuada). Migração `0008_comunidade.sql`.
+- Envio de prova simplificado: link + nome + nº de peito + print. O site é lido (Chiprun com busca própria; demais sites por tabela/metadados) e nome da prova, data, cidade, distância, posições, categoria e inscritos são preenchidos sozinhos. Resultado confirmado na Chiprun entra aprovado, sem print.
 
 ## Social (Etapa C)
 Seguir corredores e avisos (🔔 no Ranking), equipes com ranking, hall da fama, faixa de temporada, destaque de provas (admin) e `PATROCINADORES` em `config.js`. Migração: `supabase/migrations/0006_social_equipes_avisos.sql`.

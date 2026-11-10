@@ -1,8 +1,8 @@
 // Lê uma página de resultados (HTML/JSON/CSV) e devolve os dados do corredor: tempo, posição geral, inscritos, categoria...
 // Entrada (POST, usuário logado): { url: "https://...", nome?: string, peito?: string }
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
-import { analisar, norm } from "../_shared/resultados.js";
-import { ehChiprun, filtrarAtletas, modalidadeParaDistancia, parseChiprun, termoDeBusca } from "../_shared/chiprun.js";
+import { analisar, extrairMeta, norm } from "./resultados.js";
+import { ehChiprun, filtrarAtletas, modalidadeParaDistancia, parseChiprun, termoDeBusca } from "./chiprun.js";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -143,7 +143,10 @@ Deno.serve(async (req) => {
     let aviso: string | null = null;
     if (!r.tabelas) aviso = "Não encontrei uma tabela de resultados nessa página (alguns sites carregam os resultados por JavaScript). Abra a classificação geral do site e cole o link dela, ou digite os dados à mão.";
     else if (!r.candidatos.length) aviso = "Achei a tabela, mas não encontrei esse nome. Tente o nome como aparece no site, ou o número de peito.";
-    return json({ fonte: urlFinal, titulo: r.titulo, candidatos: r.candidatos, aviso });
+    // Dados da prova lidos da própria página (nome, data, cidade, distância), para preencher tudo sozinho
+    const mp = /html/i.test(tipo) ? extrairMeta(texto, urlFinal) : { titulo: r.titulo, data_prova: null, cidade_prova: null, dist_texto: null };
+    const meta = { titulo: mp.titulo || r.titulo, data_prova: mp.data_prova, cidade_prova: mp.cidade_prova, ...(modalidadeParaDistancia(mp.dist_texto) ?? {}) };
+    return json({ fonte: urlFinal, titulo: meta.titulo, meta, candidatos: r.candidatos, aviso });
   } catch (e) {
     return json({ erro: String((e as Error).message ?? e) }, 422);
   }

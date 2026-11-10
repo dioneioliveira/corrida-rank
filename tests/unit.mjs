@@ -11,3 +11,9 @@ assert.equal(calcular(10, 100, 6, PODIO_GERAL).total, 131.3, "6º lugar não tem
 assert.equal(calcular(5, 10, 11, PODIO_GERAL), null);
 assert.equal(PESOS.length, 4);
 console.log("OK: regras de pontuação");
+// leitura dos dados da prova em páginas quaisquer
+import { extrairMeta } from "../supabase/functions/_shared/resultados.js";
+const m = extrairMeta(`<title>Corrida Noturna de Joinville 2026 | Resultados</title><body>Data: 15/03/2026 Cidade: Joinville - SC. Percurso 10 km</body>`, "");
+assert.equal(m.titulo, "Corrida Noturna de Joinville 2026"); assert.equal(m.data_prova, "2026-03-15"); assert.equal(m.cidade_prova, "Joinville"); assert.equal(m.dist_texto, "10k");
+assert.equal(extrairMeta("<title>Meia Maratona de Curitiba</title>12 de abril de 2026").dist_texto, "21k");
+console.log("OK: leitura de metadados da prova");

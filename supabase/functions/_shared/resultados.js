@@ -94,3 +94,28 @@ export function analisar(corpo, tipo, consulta) {
   unicos.sort((a, b) => b.linhas_na_tabela - a.linhas_na_tabela);
   return { titulo, candidatos: unicos.slice(0, 8), tabelas: tabelas.length };
 }
+
+// ---- Dados da prova lidos de uma página qualquer (nome, data, cidade, distância) ----
+const MESES = { janeiro: 1, fevereiro: 2, marco: 3, abril: 4, maio: 5, junho: 6, julho: 7, agosto: 8, setembro: 9, outubro: 10, novembro: 11, dezembro: 12 };
+const iso = (a, m, d) => { const dt = new Date(Date.UTC(a, m - 1, d)); return dt.getUTCFullYear() === a && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d && a >= 2000 ? `${a}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}` : null; };
+const metaTag = (html, nome) => { const m = html.match(new RegExp(`<meta[^>]+(?:property|name)=["']${nome}["'][^>]*content=["']([^"']*)["']`, "i")) || html.match(new RegExp(`<meta[^>]+content=["']([^"']*)["'][^>]*(?:property|name)=["']${nome}["']`, "i")); return m ? decode(m[1]).trim() : ""; };
+
+export function extrairMeta(html, url = "") {
+  const corpo = texto(html), hoje = new Date().toISOString().slice(0, 10);
+  let titulo = metaTag(html, "og:title") || texto((html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i) || [])[1] || "") || tituloDaPagina(html);
+  titulo = titulo.split(/\s+[|·•]\s+|\s+[-–—]\s+(?=(?:resultados?|classifica|chiprun|cronometragem|inscri))/i)[0].replace(/^\s*(resultados?|classificação( geral)?)\s*(da|do|de)?\s*[:\-–]?\s*/i, "").trim();
+  // data: JSON-LD/meta → dd/mm/aaaa → "15 de março de 2026"
+  let data = null;
+  const ld = html.match(/"startDate"\s*:\s*"(\d{4})-(\d{2})-(\d{2})/); if (ld) data = iso(+ld[1], +ld[2], +ld[3]);
+  if (!data) { const m = corpo.match(/\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/); if (m) data = iso(+m[3], +m[2], +m[1]); }
+  if (!data) { const m = norm(corpo).match(/\b(\d{1,2}) de (janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro) de (\d{4})/); if (m) data = iso(+m[3], MESES[m[2]], +m[1]); }
+  if (data && data > hoje) data = null;
+  // cidade: JSON-LD → "Cidade: X" / "Local: X"
+  let cidade = (html.match(/"addressLocality"\s*:\s*"([^"]{2,60})"/) || [])[1] || "";
+  if (!cidade) { const m = corpo.match(/\b(?:cidade|local)\s*:\s*([A-Za-zÀ-ÿ' ]{3,50}?)(?:\s*[-\/,|]\s*[A-Z]{2}\b|\s{2,}|$|\s(?:data|dist|modalidade|hor))/i); if (m) cidade = m[1].trim(); }
+  // distância: título/URL primeiro; senão a única citada na página
+  const distTxt = t => { const n = norm(t); if (/meia[- ]maratona/.test(n)) return "21k"; if (/\bmaratona\b/.test(n)) return "42k"; const v = [...new Set([...n.matchAll(/\b(\d{1,3}(?:[.,]\d{1,2})?)\s*k(?:m|ms)?\b/g)].map(x => x[1].replace(",", ".")))]; return v.length === 1 ? v[0] + "k" : v.length > 1 ? "varias" : null; };
+  let dist = distTxt(titulo + " " + decodeURIComponent(url.replace(/\+/g, " ")));
+  if (!dist || dist === "varias") dist = dist === "varias" ? null : distTxt(corpo.slice(0, 6000)); if (dist === "varias") dist = null;
+  return { titulo, data_prova: data, cidade_prova: cidade || null, dist_texto: dist };
+}

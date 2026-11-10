@@ -330,13 +330,14 @@ async function minhasView() {
 function novaProvaView() {
   app.innerHTML = `<button class="link" id="bk" style="text-align:left">← Voltar</button><h1>Enviar resultado</h1>
   <div class="card" id="busca"><div class="name">🔎 Buscar resultado em site</div>
-    <p class="sub">Cole o link da página de resultados da prova. Se o site confirmar o seu resultado, a prova entra direto, sem print. Se não, eu preencho o formulário e você anexa o print.</p>
+    <p class="sub">Só precisa do <b>link</b> dos resultados, do seu <b>nome</b>, do <b>nº de peito</b> e do <b>print</b>. Eu leio o site e preencho nome da prova, data, cidade, distância, posições, categoria e total de inscritos. Se o site confirmar o resultado, a prova entra direto e o print nem é necessário.</p>
     <input id="bUrl" type="url" placeholder="Link dos resultados (https://...)" autocomplete="off">
     <div class="grid2"><input id="bNome" value="${esc(me.nome)}" placeholder="Seu nome como no site"><input id="bPeito" placeholder="Nº de peito" inputmode="numeric"></div>
-    <button type="button" class="btn ghost" id="bGo">Buscar no site</button>
-    <button type="button" class="link" id="bGoogle">Não tenho o link: procurar no Google</button>
+    <label class="filebox">📸 Print do resultado<input id="bPrint" type="file" accept="image/*"></label>
+    <button type="button" class="btn" id="bGo">Enviar prova</button>
+    <button type="button" class="link" id="bManualTop">Prefiro preencher tudo manualmente</button>
     <div id="bOut"></div></div>
-  <form id="pf" class="card"><input type="hidden" name="fonte_url">
+  <form id="pf" class="card" hidden><input type="hidden" name="fonte_url">
     <input name="nome_prova" placeholder="Nome da prova" required minlength="3" maxlength="120">
     <input name="data_prova" type="date" required max="${new Date().toISOString().slice(0, 10)}">
     <input name="cidade_prova" placeholder="Cidade da prova">
@@ -352,59 +353,66 @@ function novaProvaView() {
     <div class="err" id="err"></div><button class="btn">Enviar para aprovação</button></form>`;
   $("#bk").onclick = () => provasView();
   const form = $("#pf"), set = (n, v) => { if (v != null) form.elements[n].value = v; };
-  $("#bGoogle").onclick = () => {
-    const q = form.elements.nome_prova.value.trim(); if (q.length < 3) return toast("Digite primeiro o nome da prova, no formulário abaixo");
-    window.open("https://www.google.com/search?q=" + encodeURIComponent(q + " resultados classificação"), "_blank", "noopener");
+  const abrirForm = () => { form.hidden = false; form.scrollIntoView({ behavior: "smooth" }); };
+  $("#bManualTop").onclick = () => { anexarPrint(); abrirForm(); };
+  // Passa o print escolhido lá em cima para o formulário
+  const anexarPrint = () => { const fl = $("#bPrint").files[0]; if (fl) { const dt = new DataTransfer(); dt.items.add(fl); form.elements.print.files = dt.files; } };
+  // Quando ainda falta algo, abre o formulário e diz o que falta
+  const faltas = () => [...form.elements].filter(el => el.name && el.willValidate && !el.checkValidity()).map(el => ({ print: "o print", nome_prova: "o nome da prova", data_prova: "a data", dist_cat: "a distância", km: "a distância em km", tempo: "o tempo", inscritos: "o total de inscritos", pos_geral: "a posição geral" }[el.name] || el.name));
+  const preencherMeta = data => {
+    const m = data.meta || {}; set("fonte_url", data.fonte);
+    if ((m.titulo || data.titulo) && !form.elements.nome_prova.value.trim()) set("nome_prova", (m.titulo || data.titulo).slice(0, 120));
+    if (m.data_prova) set("data_prova", m.data_prova);
+    if (m.cidade_prova) set("cidade_prova", m.cidade_prova.toLowerCase().replace(/(^|\s)\S/g, x => x.toUpperCase()).replace(/\b(De|Do|Da|Dos|Das)\b/g, x => x.toLowerCase()));
+    if (m.dist_cat) { set("dist_cat", m.dist_cat); form.elements.dist_cat.dispatchEvent(new Event("change")); if (m.dist_cat === "outra") set("km", m.distancia_km); }
   };
   $("#bGo").onclick = async () => {
     const out = $("#bOut"), btn = $("#bGo"), url = $("#bUrl").value.trim();
     if (!/^https:\/\//i.test(url)) return out.innerHTML = `<div class="err">Cole um link que comece com https://</div>`;
-    btn.disabled = true; btn.textContent = "Buscando…"; out.innerHTML = "";
+    btn.disabled = true; btn.textContent = "Lendo o site…"; out.innerHTML = "";
     const { data, error } = await db.functions.invoke("buscar-resultado", { body: { url, nome: $("#bNome").value.trim(), peito: $("#bPeito").value.trim() } });
-    btn.disabled = false; btn.textContent = "Buscar no site";
+    btn.disabled = false; btn.textContent = "Enviar prova";
     let msg = data?.erro; if (!msg && error) { try { msg = (await error.context.json()).erro; } catch { msg = "Não foi possível consultar o site agora."; } }
     if (msg) return out.innerHTML = `<div class="err">${esc(msg)}</div>`;
-    if (!data.candidatos.length) return out.innerHTML = `<div class="err">${esc(data.aviso || "Não encontrei seu nome nessa página.")}</div>`;
+    if (!data.candidatos.length) {
+      preencherMeta(data); anexarPrint(); abrirForm();
+      return out.innerHTML = `<div class="err">${esc(data.aviso || "Não encontrei seu nome nessa página.")}</div><p class="sub">Preenchi o que a página trouxe da prova. Complete o resto abaixo e anexe o print.</p>`;
+    }
     out.innerHTML = `<p class="sub">Toque no seu resultado:</p>` + data.candidatos.map((c, i) => `<button type="button" class="cand" data-i="${i}">
       <div class="name">${esc(c.nome)}${c.peito ? " · nº " + esc(c.peito) : ""}</div>
       <div class="sub">${fmtTime(c.tempo_s)} · ${c.pos_geral}º de ${c.inscritos}${c.categoria ? ` · ${esc(c.categoria)}: ${c.pos_cat}º de ${c.insc_cat}` : ""}</div>
       ${c.parcial ? `<div class="warn">⚠️ A página parece paginada; o total de inscritos pode ser maior.</div>` : ""}
       ${c.pos_geral_calculada ? `<div class="warn">Posição geral calculada pela ordem da tabela.</div>` : ""}${c.pos_cat_calculada ? `<div class="warn">Posição na categoria calculada pela ordem da tabela.</div>` : ""}
       ${c.sexo && c.sexo !== me.sexo ? `<div class="warn">⚠️ O resultado indica sexo ${c.sexo === "M" ? "masculino" : "feminino"}, diferente do seu perfil.</div>` : ""}</button>`).join("");
-    const preencher = c => {
+    const preencher = (c, auto = false) => {
       set("tempo", fmtTime(c.tempo_s)); set("inscritos", c.inscritos); set("pos_geral", c.pos_geral);
       set("categoria", c.categoria ?? ""); set("insc_cat", c.insc_cat ?? ""); set("pos_cat", c.pos_cat ?? ""); set("fonte_url", data.fonte); set("peito", c.peito ?? "");
-      const m = data.meta || {};
-      if ((m.titulo || data.titulo) && !form.elements.nome_prova.value.trim()) set("nome_prova", (m.titulo || data.titulo).slice(0, 120));
-      if (m.data_prova) set("data_prova", m.data_prova);
-      if (m.cidade_prova) set("cidade_prova", m.cidade_prova.toLowerCase().replace(/(^|\s)\S/g, x => x.toUpperCase()).replace(/\b(De|Do|Da|Dos|Das)\b/g, x => x.toLowerCase()));
-      if (m.dist_cat) { set("dist_cat", m.dist_cat); form.elements.dist_cat.dispatchEvent(new Event("change")); if (m.dist_cat === "outra") set("km", m.distancia_km); }
-      toast("Preenchido! Confira com o print e anexe-o para enviar."); form.scrollIntoView({ behavior: "smooth" });
+      preencherMeta(data); anexarPrint();
+      const f0 = faltas();
+      if (auto && !f0.length) { out.innerHTML = `<p class="sub">Dados lidos do site. Enviando com o print…</p>`; return form.requestSubmit(); }
+      abrirForm();
+      out.innerHTML = `<p class="sub">Li o resultado no site. ${f0.length ? "Falta só: <b>" + f0.join(", ") + "</b>." : "Confira os dados abaixo e toque em enviar."}</p>`;
     };
-    // Resultado completo vindo do site: pode ser salvo direto, já aprovado e sem print
-    const confirmar = (c, m) => {
-      out.querySelector("#okbox")?.remove();
-      out.insertAdjacentHTML("beforeend", `<div class="okbox" id="okbox"><b>✅ Resultado confirmado no site da prova</b>
-        <div class="sub">${esc(m.titulo || data.titulo)} · ${fmtDate(m.data_prova)}${m.cidade_prova ? " · " + esc(m.cidade_prova) : ""} · ${esc((m.dist_cat || "").toUpperCase())}</div>
-        <div class="sub">${fmtTime(c.tempo_s)} · ${c.pos_geral}º de ${c.inscritos}${c.categoria ? ` · ${esc(c.categoria)}: ${c.pos_cat}º de ${c.insc_cat}` : ""}</div>
-        <p class="sub">Não precisa de print. A prova entra aprovada na hora e fica marcada como verificada.</p>
-        <button type="button" class="btn" id="bSalvar">Salvar prova</button>
-        <button type="button" class="link" id="bManual">Prefiro preencher e enviar com print</button><div class="err" id="bErr"></div></div>`);
-      $("#bManual").onclick = () => preencher(c);
-      $("#bSalvar").onclick = async () => {
-        const bt = $("#bSalvar"); bt.disabled = true; bt.textContent = "Salvando…"; $("#bErr").textContent = "";
-        const r = await db.functions.invoke("buscar-resultado", { body: { url, nome: me.nome, peito: c.peito, salvar: true } });
-        let erro = r.data?.erro; if (!erro && r.error) { try { erro = (await r.error.context.json()).erro; } catch { erro = "Não foi possível salvar agora."; } }
-        if (erro) { bt.disabled = false; bt.textContent = "Salvar prova"; return $("#bErr").textContent = erro; }
-        toast("Prova salva e aprovada ✅"); f.quem = "minhas"; provasView();
-      };
-      out.querySelector("#okbox").scrollIntoView({ behavior: "smooth", block: "center" });
+    // Resultado completo vindo do site: é salvo direto, já aprovado e sem print
+    const salvarDireto = async c => {
+      out.innerHTML = `<p class="sub">✅ Resultado confirmado no site. Salvando…</p>`;
+      const r = await db.functions.invoke("buscar-resultado", { body: { url, nome: me.nome, peito: c.peito, salvar: true } });
+      let erro = r.data?.erro; if (!erro && r.error) { try { erro = (await r.error.context.json()).erro; } catch { erro = "Não foi possível salvar agora."; } }
+      if (erro) { out.innerHTML = `<div class="err">${esc(erro)}</div>`; return preencher(c); }
+      toast("Prova salva e aprovada ✅"); f.quem = "minhas"; provasView();
     };
     out.querySelectorAll(".cand").forEach(b => b.onclick = () => {
       const i = +b.dataset.i, c = data.candidatos[i];
       out.querySelectorAll(".cand").forEach(x => x.classList.toggle("on", x === b));
-      if (data.confiavel?.[i] && c.peito && !(c.sexo && c.sexo !== me.sexo)) confirmar(c, data.meta || {}); else { out.querySelector("#okbox")?.remove(); preencher(c); }
+      escolher(i);
     });
+    const escolher = i => {
+      const c = data.candidatos[i];
+      if (data.confiavel?.[i] && c.peito && !(c.sexo && c.sexo !== me.sexo)) salvarDireto(c); else preencher(c, true);
+    };
+    // Um único resultado (ou só um com o nº de peito informado): segue sozinho, sem pedir para tocar
+    const nP = $("#bPeito").value.replace(/\D/g, ""), unicos = nP ? data.candidatos.map((c, i) => [c, i]).filter(([c]) => String(c.peito ?? "").replace(/\D/g, "") === nP) : data.candidatos.map((c, i) => [c, i]);
+    if (unicos.length === 1) escolher(unicos[0][1]);
   };
   const sel = app.querySelector("[name=dist_cat]");
   sel.onchange = () => { $("#km").hidden = sel.value !== "outra"; $("#km").required = sel.value === "outra"; };
