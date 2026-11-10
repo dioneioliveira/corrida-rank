@@ -1,8 +1,8 @@
 // Lê uma página de resultados (HTML/JSON/CSV) e devolve os dados do corredor: tempo, posição geral, inscritos, categoria...
 // Entrada (POST, usuário logado): { url: "https://...", nome?: string, peito?: string }
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
-import { analisar, extrairMeta, norm } from "./resultados.js";
-import { ehChiprun, filtrarAtletas, modalidadeParaDistancia, parseChiprun, termoDeBusca } from "./chiprun.js";
+import { analisar, extrairMeta, norm } from "../_shared/resultados.js";
+import { ehChiprun, filtrarAtletas, modalidadeParaDistancia, parseChiprun, termoDeBusca } from "../_shared/chiprun.js";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
