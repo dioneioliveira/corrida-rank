@@ -7,6 +7,7 @@ import { pedirTexto, confirmarModal } from "./modal.js";
 import { adminView as abrirAdmin } from "./admin.js";
 import { calendarioView, carregarMinhasProximas, proximasHTML, ligarProximas } from "./calendario.js";
 import { fmtNum, fmtKm, calcular, peso, PESOS, PODIO_GERAL, PODIO_CATEGORIA, PARTICIPACAO, nivelDe, proximoNivel } from "./regras.js";
+import { qrSvg } from "./qr.js";
 import { contarAvisos, avisosView, seguirHTML, ligarSeguir, temporadaHTML, patrocinadoresHTML, equipesRankingHTML, hallHTML, equipeHTML, ligarEquipe } from "./social.js";
 import { SUPABASE_URL, SUPABASE_ANON_KEY, YOUTUBE_URL, PIX_CHAVE, SHOPEE_LOJA_URL, SHOPEE_AVISO, PRODUTOS, APP_URL, PATROCINADORES, VERSAO_TERMO, TEXTO_TERMO } from "./config.js";
 
@@ -31,6 +32,16 @@ const avatar = (p, cls = "") => p.avatar_url
 const cache = new Map();
 let me = null, isAdmin = false, tab = "ranking", stack = [];
 const f = { tipo: "geral", sexo: "M", ano: new Date().getFullYear(), dist: "", cidade: "", quem: "todos", cat: "" };
+
+// ---------- Tema (claro / escuro / automático) ----------
+function temaAtual() { try { const t = localStorage.getItem("cr_tema"); return t === "light" || t === "dark" ? t : "auto"; } catch { return "auto"; } }
+function aplicarTema(t) {
+  try { t === "auto" ? localStorage.removeItem("cr_tema") : localStorage.setItem("cr_tema", t); } catch {}
+  if (t === "auto") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
+  const claro = t === "light" || (t === "auto" && matchMedia("(prefers-color-scheme: light)").matches);
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", claro ? "#f4f6f1" : "#0c0e11");
+}
+aplicarTema(temaAtual());
 
 // ---------- Cadastro / login ----------
 function authView(signup = false) {
@@ -447,6 +458,7 @@ const ctx = { db, $, app, esc, toast, avatar, fmtDate, fmtTime, fmtNum, parseTim
 const cartaoConvite = () => `<div class="card center"><div style="font-size:34px">📣</div><div class="name">Convide outros corredores</div>
   <p class="sub">Quanto mais gente, mais divertido o ranking.</p><button class="btn" id="shApp">Compartilhar o app</button>
   <div class="grid2" style="margin-top:8px"><a class="btn ghost" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(TEXTO_CONVITE + " " + LINK_APP)}">WhatsApp</a><button class="btn ghost" id="cpLink">Copiar link</button></div>
+  <div class="qr">${qrSvg(LINK_APP)}<div class="sub">Aponte a câmera para entrar</div></div>
   <div class="pix" style="font-size:13px">${esc(LINK_APP)}</div></div>`;
 const ligarConvite = () => { $("#shApp").onclick = compartilharApp; $("#cpLink").onclick = copiarLink; };
 
@@ -485,6 +497,7 @@ async function perfilView() {
   ${isAdmin ? `<button class="btn" id="adm" style="margin-bottom:10px">🛡️ Aprovar provas</button>` : ""}
   <button class="btn ghost" id="convidar" style="margin-bottom:10px">📣 Convidar corredores</button>
   <button class="btn ghost" id="out" style="margin-bottom:10px">Sair</button>
+  <div class="card"><b>🎨 Aparência</b><div class="chips" style="margin-top:8px">${[["auto", "Automático"], ["light", "Claro"], ["dark", "Escuro"]].map(t => `<button class="chip ${temaAtual() === t[0] ? "on" : ""}" data-tema="${t[0]}">${t[1]}</button>`).join("")}</div></div>
   <button class="btn ghost" id="exp" style="margin-bottom:10px">⬇️ Exportar meus dados</button>
   <button class="link" id="del" style="color:#ff6b6b">Excluir minha conta e meus dados</button>
   <div class="sub center" style="font-size:12px;margin-top:14px"><a href="termos.html">Termos de Uso</a> · <a href="privacidade.html">Privacidade</a></div>`;
@@ -522,6 +535,7 @@ async function perfilView() {
     const { error } = await db.from("profiles").update({ nome: v.nome.trim(), cidade: v.cidade.trim(), sexo: v.sexo }).eq("id", me.id);
     if (error) return toast(error.message); Object.assign(me, v); toast("Perfil salvo ✅");
   };
+  app.querySelectorAll("[data-tema]").forEach(b => b.onclick = () => { aplicarTema(b.dataset.tema); perfilView(); });
   $("#out").onclick = () => db.auth.signOut();
   $("#exp").onclick = async () => {
     try {
