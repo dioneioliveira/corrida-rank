@@ -9,7 +9,7 @@ import { calendarioView, carregarMinhasProximas, proximasHTML, ligarProximas } f
 import { fmtNum, fmtKm, calcular, peso, PESOS, PODIO_GERAL, PODIO_CATEGORIA, PARTICIPACAO, nivelDe, proximoNivel } from "./regras.js";
 import { qrSvg } from "./qr.js";
 import { contarAvisos, avisosView, seguirHTML, ligarSeguir, temporadaHTML, patrocinadoresHTML, equipesRankingHTML, hallHTML, equipeHTML, ligarEquipe } from "./social.js";
-import { SUPABASE_URL, SUPABASE_ANON_KEY, YOUTUBE_URL, PIX_CHAVE, SHOPEE_LOJA_URL, SHOPEE_AVISO, PRODUTOS, APP_URL, PATROCINADORES, VERSAO_TERMO, TEXTO_TERMO } from "./config.js";
+import { SUPABASE_URL, SUPABASE_ANON_KEY, YOUTUBE_URL, PIX_CHAVE, APP_URL, PATROCINADORES, VERSAO_TERMO, TEXTO_TERMO } from "./config.js";
 
 // Sem a trava entre abas (navigator.locks): no iPhone, uma aba em segundo plano podia deixar o login esperando para sempre.
 const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { lock: (_nome, _tempo, fn) => fn() } });
@@ -440,34 +440,6 @@ function novaProvaView() {
   };
 }
 
-// ---------- Loja (Shopee) ----------
-// Produtos: produtos.json (atualizado sozinho a partir da vitrine de afiliado) + os que estiverem em PRODUTOS no config.js
-let vitrine = null;
-async function carregarVitrine() {
-  if (vitrine) return vitrine;
-  let auto = [];
-  try { const r = await fetch("produtos.json", { cache: "no-store" }); if (r.ok) auto = (await r.json()).itens || []; } catch { /* sem o arquivo: usa só o config */ }
-  const manuais = PRODUTOS.map(p => ({ titulo: p.titulo, url: p.url, preco: p.preco, imagem: p.imagem, categoria: p.categoria || "Para corredores" }));
-  return vitrine = [...auto, ...manuais];
-}
-async function lojaView() {
-  app.innerHTML = `<h1>🛒 Loja do corredor</h1><p class="sub">Produtos de corrida de rua que eu indico, direto na Shopee.</p><div id="lojaBox" class="card">Carregando…</div>`;
-  const todos = await carregarVitrine(), cats = [...new Set(todos.map(p => p.categoria).filter(Boolean))];
-  if (!cats.includes(f.cat)) f.cat = "";
-  const chip = (v, t) => `<button class="chip ${f.cat === v ? "on" : ""}" data-v="${esc(v)}">${esc(t)}</button>`;
-  const lista = todos.filter(p => !f.cat || p.categoria === f.cat);
-  $("#lojaBox").outerHTML = `${SHOPEE_LOJA_URL ? `<a class="btn" style="display:block;text-decoration:none;margin:12px 0" href="${esc(SHOPEE_LOJA_URL)}" target="_blank" rel="noopener sponsored">Ver minha vitrine completa na Shopee</a>` : ""}
-  ${cats.length > 1 ? `<div class="chips">${chip("", "Todos")}${cats.map(c => chip(c, c)).join("")}</div>` : ""}
-  ${lista.length ? `<div class="loja">${lista.map(p => `<a class="prod" href="${esc(p.url)}" target="_blank" rel="noopener sponsored">
-    <div class="pimg">${p.imagem ? `<img src="${esc(p.imagem)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<div class="ph">🏃</div>`}${p.desconto ? `<span class="pdesc">${esc(p.desconto)}</span>` : ""}</div>
-    <div class="pn">${esc(p.titulo)}</div>
-    ${p.preco ? `<div class="pp">${esc(p.preco)}${p.dica ? `<small>${esc(p.dica)}</small>` : ""}</div>` : ""}${p.precoAntes ? `<div class="pa">${esc(p.precoAntes)}</div>` : ""}
-    ${p.vendidos ? `<div class="pv">${esc(p.vendidos.replace("Vendido(s)", "vendidos"))}</div>` : ""}<div class="pb">Ver na Shopee ›</div></a>`).join("")}</div>`
-    : `<div class="card empty">Os produtos entram em breve. 🛍️</div>`}
-  <p class="sub center" style="margin-top:14px">${esc(SHOPEE_AVISO)}</p>`;
-  app.querySelectorAll(".chip").forEach(b => b.onclick = () => { f.cat = b.dataset.v; lojaView(); });
-}
-
 // ---------- Convidar outros corredores ----------
 const LINK_APP = APP_URL || (location.origin + location.pathname);
 const TEXTO_CONVITE = "Corrida Rank: o campeonato dos corredores de rua. Só valem provas! Entre no ranking:";
@@ -606,7 +578,7 @@ function toJpeg(file, max, square = false) {
   });
 }
 
-const views = { ranking: rankingView, provas: provasView, loja: lojaView, apoie: apoieView, perfil: perfilView };
+const views = { ranking: rankingView, provas: provasView, apoie: apoieView, perfil: perfilView };
 function show(t) {
   tab = t; stack = [];
   tabs.querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.tab === t));

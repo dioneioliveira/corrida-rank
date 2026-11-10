@@ -9,14 +9,7 @@ export const APP_URL = "https://dioneioliveira.github.io/corrida-rank/";
 export const YOUTUBE_URL = "https://www.youtube.com/@dyoliveirayt";
 export const PIX_CHAVE = "dioneioliveirasbs@gmail.com";
 
-// Loja (Shopee). Cole o link da sua conta e adicione os produtos de corrida de rua.
-export const SHOPEE_LOJA_URL = "https://collshp.com/dyoliveirayt?view=storefront";
-export const SHOPEE_AVISO = "Alguns links podem ser de afiliado: se você comprar por eles, posso receber uma comissão, sem custo extra para você.";
-export const PRODUTOS = [
-  // { titulo: "Tênis de corrida ...", url: "https://s.shopee.com.br/xxxx", preco: "R$ 199,90", imagem: "https://...", categoria: "Tênis" },
-];
-
-// Patrocinadores (faixa no ranking). Ex.: { nome: "Loja X", url: "https://..." }
+// Patrocinadores (faixa no ranking). Ex.: { nome: "Patrocinador X", url: "https://..." }
 export const PATROCINADORES = [];
 
 // Termo de aceite. Se mudar o texto, aumente a versão.

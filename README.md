@@ -10,7 +10,6 @@ Campeonato de corredores de rua, mobile-first (PWA). **Só valem provas**: cada 
 - **Buscar resultado em site**: o corredor cola o link da página de resultados da prova; a função `buscar-resultado` lê a tabela (HTML, JSON ou CSV), acha o corredor pelo nome ou nº de peito e preenche tempo, posição, inscritos e categoria. O link fica salvo em `fonte_url` e aparece para o administrador. O print continua obrigatório.
 - Moderação: toda prova entra "em análise"; o admin vê o print e aprova ou rejeita (com motivo). Editar uma prova a devolve para análise.
 - **Selos** bronze/prata/ouro (1/3/5 provas aprovadas) por distância (3, 5, 10, 15, 21, 42 km) e por cidade da prova.
-- Aba **Loja** com produtos de corrida de rua da Shopee: preencha `SHOPEE_LOJA_URL` e a lista `PRODUTOS` em `config.js` (título, link, preço, imagem e categoria opcionais). Há um aviso de link de afiliado configurável (`SHOPEE_AVISO`).
 - Cartão para compartilhar os **selos** (Stories), além dos cartões de prova e de ranking. Números decimais usam vírgula.
 - Quadro **Como funciona a pontuação** no Ranking, com tabela de pesos e simulador (`regras.js`, mesma fórmula do banco).
 - Perfil público com conquistas, melhores tempos e provas; feed das últimas provas.
@@ -62,7 +61,7 @@ Campeonato de corredores de rua, mobile-first (PWA). **Só valem provas**: cada 
 Seguir corredores e avisos (🔔 no Ranking), equipes com ranking, hall da fama, faixa de temporada, destaque de provas (admin) e `PATROCINADORES` em `config.js`. Migração: `supabase/migrations/0006_social_equipes_avisos.sql`.
 
 ## Qualidade e operação (Etapa D)
-- **Testes:** `.github/workflows/tests.yml` roda em PRs e branches (sintaxe dos módulos, `tests/unit.mjs` com as regras de pontuação, manifest/produtos). Localmente: `node tests/unit.mjs`.
+- **Testes:** `.github/workflows/tests.yml` roda em PRs e branches (sintaxe dos módulos, `tests/unit.mjs` com as regras de pontuação, manifest). Localmente: `node tests/unit.mjs`.
 - **Monitor de erros:** falhas do navegador vão para a tabela `erros_app` (até 5 por visita); a administração vê em Perfil → Administração → 🐞 Erros. Migração `0007_monitor_erros.sql`.
 
 ### Ativar o e-mail de aceite (Resend)

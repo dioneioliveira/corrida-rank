@@ -17,5 +17,5 @@ jobs:
         run: node tests/unit.mjs
       - name: Páginas e manifest
         run: |
-          python3 -c "import json;json.load(open('manifest.json'));json.load(open('produtos.json'))"
+          python3 -c "import json;json.load(open('manifest.json'))"
           for p in index termos privacidade; do test -s $p.html || exit 1; done
