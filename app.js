@@ -7,7 +7,8 @@ import { pedirTexto, confirmarModal } from "./modal.js";
 import { adminView as abrirAdmin } from "./admin.js";
 import { calendarioView, carregarMinhasProximas, proximasHTML, ligarProximas } from "./calendario.js";
 import { fmtNum, fmtKm, calcular, peso, PESOS, PODIO_GERAL, PODIO_CATEGORIA, PARTICIPACAO, nivelDe, proximoNivel } from "./regras.js";
-import { SUPABASE_URL, SUPABASE_ANON_KEY, YOUTUBE_URL, PIX_CHAVE, SHOPEE_LOJA_URL, SHOPEE_AVISO, PRODUTOS, APP_URL, VERSAO_TERMO, TEXTO_TERMO } from "./config.js";
+import { contarAvisos, avisosView, seguirHTML, ligarSeguir, temporadaHTML, patrocinadoresHTML, equipesRankingHTML, hallHTML, equipeHTML, ligarEquipe } from "./social.js";
+import { SUPABASE_URL, SUPABASE_ANON_KEY, YOUTUBE_URL, PIX_CHAVE, SHOPEE_LOJA_URL, SHOPEE_AVISO, PRODUTOS, APP_URL, PATROCINADORES, VERSAO_TERMO, TEXTO_TERMO } from "./config.js";
 
 // Sem a trava entre abas (navigator.locks): no iPhone, uma aba em segundo plano podia deixar o login esperando para sempre.
 const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { lock: (_nome, _tempo, fn) => fn() } });
@@ -85,15 +86,27 @@ async function rankingView() {
   const anos = [f.ano - 1, f.ano, f.ano + 1].filter(a => a <= new Date().getFullYear());
   const tempos = f.tipo === "tempos";
   if (tempos && !f.dist) f.dist = "5k";
-  app.innerHTML = `<h1>🏆 Ranking</h1>
-  <div class="chips">${chip("tipo", "geral", "Geral")}${chip("tipo", "categoria", "Por idade")}${chip("tipo", "tempos", "Melhores tempos")}</div>
+  const avisos = await contarAvisos(ctx).catch(() => 0);
+  if (f.tipo === "equipes") {
+    app.innerHTML = `<div class="provahead"><h1>🏆 Ranking</h1><button class="ico" id="sino" aria-label="Avisos">🔔${avisos ? `<b class="dot">${avisos}</b>` : ""}</button></div>${temporadaHTML(f.ano)}
+    <div class="chips">${chip("tipo", "geral", "Geral")}${chip("tipo", "categoria", "Por idade")}${chip("tipo", "tempos", "Melhores tempos")}${chip("tipo", "equipes", "Equipes")}</div>
+    <div class="chips">${anos.map(a => chip("ano", a, a)).join("")}</div>${await equipesRankingHTML(ctx, f.ano)}${patrocinadoresHTML(ctx, PATROCINADORES)}`;
+    app.querySelectorAll(".chip").forEach(b => b.onclick = () => { f[b.dataset.k] = isNaN(b.dataset.v) || b.dataset.v === "" ? b.dataset.v : +b.dataset.v; rankingView(); });
+    $("#sino").onclick = () => avisosView(ctx, () => show("ranking"));
+    return;
+  }
+  app.innerHTML = `<div class="provahead"><h1>🏆 Ranking</h1><button class="ico" id="sino" aria-label="Avisos">🔔${avisos ? `<b class="dot">${avisos}</b>` : ""}</button></div>${temporadaHTML(f.ano)}
+  <div class="chips">${chip("tipo", "geral", "Geral")}${chip("tipo", "categoria", "Por idade")}${chip("tipo", "tempos", "Melhores tempos")}${chip("tipo", "equipes", "Equipes")}</div>
   <div class="chips">${chip("sexo", "M", "Masculino")}${chip("sexo", "F", "Feminino")}${anos.map(a => chip("ano", a, a)).join("")}</div>
   <div class="chips">${tempos ? "" : chip("dist", "", "Todas")}${DIST.filter(d => d[0] !== "outra").map(d => chip("dist", d[0], d[1])).join("")}</div>
   <select id="cidade"><option value="">🌎 Todas as cidades</option>${(cidades || []).map(c => `<option value="${esc(c.cidade)}" ${f.cidade === c.cidade ? "selected" : ""}>${esc(c.cidade)} (${c.corredores})</option>`).join("")}</select>
   <div class="mebar" id="meBar" hidden></div>
   <div id="list" class="card">Carregando…</div>
+  ${patrocinadoresHTML(ctx, PATROCINADORES)}<div id="hall"></div>
   <button class="link" id="comoBtn">❓ Como funciona a pontuação</button>
   <details class="card" id="como"><summary>Como funciona a pontuação</summary>${comoHTML()}</details>`;
+  $("#sino").onclick = () => avisosView(ctx, () => show("ranking"));
+  hallHTML(ctx).then(h => { if ($("#hall")) { $("#hall").innerHTML = h; app.querySelectorAll("#hall [data-u]").forEach(r => r.onclick = () => runnerView(r.dataset.u)); } });
   $("#comoBtn").onclick = () => { const d = $("#como"); d.open = true; d.scrollIntoView({ behavior: "smooth", block: "start" }); };
   bindSimulador();
   app.querySelectorAll(".chip").forEach(b => b.onclick = () => { f[b.dataset.k] = isNaN(b.dataset.v) || b.dataset.v === "" ? b.dataset.v : +b.dataset.v; rankingView(); });
@@ -215,16 +228,17 @@ async function runnerView(uid, back = true) {
     db.from("rps").select("*").eq("user_id", uid)]);
   if (!p) return toast("Corredor não encontrado");
   const best = DIST.filter(d => d[0] !== "outra").map(d => [d[1], Math.min(...(l || []).filter(x => x.dist_cat === d[0]).map(x => x.tempo_s))]).filter(b => isFinite(b[1]));
+  const segBtn = await seguirHTML(ctx, uid), { data: eq } = p.equipe_id ? await db.from("equipes").select("nome").eq("id", p.equipe_id).maybeSingle() : { data: null };
   const pts = (l || []).filter(x => x.ano === f.ano).reduce((t, x) => t + Number(x.pts_geral), 0);
   app.innerHTML = `<button class="link" id="bk" style="text-align:left">← Voltar</button>
-  <div class="card center">${avatar(p, "big")}<div class="name" style="font-size:20px">${esc(p.nome)}</div><div class="sub">📍 ${esc(p.cidade)} · ${p.sexo === "M" ? "Masculino" : "Feminino"}</div>
+  <div class="card center">${avatar(p, "big")}<div class="name" style="font-size:20px">${esc(p.nome)}</div><div class="sub">📍 ${esc(p.cidade)} · ${p.sexo === "M" ? "Masculino" : "Feminino"}</div>${eq ? `<div class="sub">👟 ${esc(eq.nome)}</div>` : ""}${segBtn}
   <div class="stats"><div><b>${(l || []).length}</b><span>provas</span></div><div><b>${fmtNum(pts, 0)}</b><span>pts ${f.ano}</span></div><div><b>${(l || []).filter(x => x.pos_geral <= 5 || (x.pos_cat && x.pos_cat <= 5)).length}</b><span>pódios</span></div></div></div>
   ${badges(l || []).length ? `<h2>Conquistas</h2><div class="badges">${badges(l).map(b => `<div class="badge"><div>${b[1]}</div><span>${b[2]}</span></div>`).join("")}</div>` : ""}
   ${selosHTML(l || [], uid === me.id)}
   ${rpsHTML(ctx, l || [], rps || [], false)}
   <h2>Provas</h2>${(l || []).map(r => provaCard(r)).join("") || `<div class="card empty">Nenhuma prova aprovada ainda</div>`}`;
   $("#bk").onclick = () => { show(stack.pop() || "ranking"); };
-  bindPrints(); bindSelos(l || [], p);
+  bindPrints(); bindSelos(l || [], p); ligarSeguir(ctx, uid, () => runnerView(uid, false));
 }
 
 // "ver print" para provas com print; "ver fonte" para as confirmadas direto no site
@@ -460,6 +474,7 @@ async function perfilView() {
   <div class="card center">${avatar(me, "big")}<div class="grid2"><label class="link" style="display:block">📷 Trocar foto<input id="photo" type="file" accept="image/*" hidden></label>${me.avatar_url ? `<button type="button" class="link" id="reenq">✂️ Reenquadrar</button>` : "<span></span>"}</div>
     <div class="name">${esc(me.nome)}</div><div class="sub">📍 ${esc(me.cidade)}</div>
     ${badges(l || []).length ? `<div class="badges" style="margin-top:10px">${badges(l).map(b => `<div class="badge"><div>${b[1]}</div><span>${b[2]}</span></div>`).join("")}</div>` : ""}</div>
+  ${await equipeHTML(ctx)}
   ${proximasHTML(ctx, proximas)}
   ${metasHTML(ctx, l || [], rps || [], metas || [])}
   ${rpsHTML(ctx, l || [], rps || [], true)}
@@ -473,7 +488,7 @@ async function perfilView() {
   <button class="btn ghost" id="exp" style="margin-bottom:10px">⬇️ Exportar meus dados</button>
   <button class="link" id="del" style="color:#ff6b6b">Excluir minha conta e meus dados</button>
   <div class="sub center" style="font-size:12px;margin-top:14px"><a href="termos.html">Termos de Uso</a> · <a href="privacidade.html">Privacidade</a></div>`;
-  bindSelos(l || [], me);
+  bindSelos(l || [], me); ligarEquipe(ctx, perfilView);
   ligarRpsMetas(ctx, { recarregar: perfilView });
   ligarProximas(ctx, proximas, { recarregar: perfilView, irAgenda: () => { f.quem = "calendario"; show("provas"); } });
   // Foto: escolhe a imagem, enquadra o rosto e salva (guarda também o original para reenquadrar depois)
@@ -510,7 +525,7 @@ async function perfilView() {
   $("#out").onclick = () => db.auth.signOut();
   $("#exp").onclick = async () => {
     try {
-      const tabelas = [["provas", "user_id"], ["rps", "user_id"], ["metas", "user_id"], ["eventos", "user_id"], ["evento_presencas", "user_id"], ["denuncias", "denunciante"]];
+      const tabelas = [["provas", "user_id"], ["rps", "user_id"], ["metas", "user_id"], ["eventos", "user_id"], ["evento_presencas", "user_id"], ["denuncias", "denunciante"], ["seguidores", "seguidor"], ["avisos", "user_id"], ["equipes", "dono"]];
       const out = { exportado_em: new Date().toISOString(), perfil: me, email: (await db.auth.getSession()).data.session?.user?.email };
       for (const [t, col] of tabelas) { const { data, error } = await db.from(t).select("*").eq(col, me.id); if (error) throw error; out[t] = data; }
       const url = URL.createObjectURL(new Blob([JSON.stringify(out, null, 2)], { type: "application/json" }));

@@ -16,6 +16,9 @@ export const PRODUTOS = [
   // { titulo: "Tênis de corrida ...", url: "https://s.shopee.com.br/xxxx", preco: "R$ 199,90", imagem: "https://...", categoria: "Tênis" },
 ];
 
+// Patrocinadores (faixa no ranking). Ex.: { nome: "Loja X", url: "https://..." }
+export const PATROCINADORES = [];
+
 // Termo de aceite. Se mudar o texto, aumente a versão.
 export const VERSAO_TERMO = "1.0";
 export const TEXTO_TERMO =
